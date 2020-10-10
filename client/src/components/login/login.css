@@ -1,0 +1,28 @@
+.container {
+    height: 100%;
+    border-radius: 20px;
+}
+
+.menu {
+    padding: 100px;
+    background-color: grey;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    border-radius: 20px;
+}
+
+.box-username {
+    margin-bottom: 10px;
+}
+
+.box {
+    width: 400px;
+    padding: 50px;
+    background-color: whitesmoke;
+    border-radius: 20px;
+}
+
+.box-password {
+    margin-bottom: 10px;
+}

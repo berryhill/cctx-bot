@@ -1,0 +1,23 @@
+.register-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+}
+
+.register-box {
+    max-width: 50%;
+    padding: 25px;
+    background-color: lightblue;
+    border-radius: 20px;
+}
+
+.form-container {
+    display:flex;
+    flex-direction: column;
+}
+
+.form-container input {
+    margin-top: 2px;
+    margin-bottom: 15px;
+}
