@@ -39,7 +39,7 @@ const Homepage = (props) => {
 
     const buildPositionTable = () => {
         if(!unauthorized) {
-            props.latestPrivate['position'][session.username].map((pos) => {
+            return props.latestPrivate['position'][session.username].map((pos) => {
                 const { symbol, currency, currentQty, liquidationPrice } = pos
     
                 //Return table element for current symbol
@@ -128,7 +128,7 @@ const Homepage = (props) => {
                 </div>
             </div>
             <div className='container-table'>
-                <h3>Orders opened at Market</h3>
+                <h3>Position Data</h3>
                 <table>
                     <thead>
                         <tr className="table-head">
