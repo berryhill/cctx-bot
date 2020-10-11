@@ -16,7 +16,7 @@
   "author": "DeusNexus",
   "license": "ISC",
   "dependencies": {
-    "ccxt": "^1.35.82",
+    "ccxt": "^1.36.1",
     "cors": "^2.8.5",
     "dotenv": "^8.2.0",
     "express": "^4.17.1",

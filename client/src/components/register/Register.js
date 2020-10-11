@@ -1,9 +1,8 @@
-import React, { useState } from 'react'
-import './register.css'
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+import './register.css';
 
-const Register = (props) => {
-    const { homepage } = props
-
+const Register = () => {
     const [username, setUsername] = useState('')
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
@@ -32,18 +31,14 @@ const Register = (props) => {
                     } else {
                         alert('Successfully registered!')
                         console.log('Registration response: ',d)
-                        homepage()
+                        
+                        //REDIRECT TO HOMEPAGE homepage()
                     }
                 })
                 .catch(e => console.log('Registration Error: ',e))
         } else {
             alert(`The password don't match, please check if you spelled them correctly!`)
         }
-    }
-
-    const handleHomepage = (e) => {
-        e.preventDefault()
-        homepage()
     }
 
     const handleChange = (e) => {
@@ -114,7 +109,11 @@ const Register = (props) => {
                         onChange={handleChange}
                         />
                     <input type='submit' value='Register' onClick={registerUser}/>
-                    <input type='submit' value='Back to Login' onClick={handleHomepage}/>
+                    <Link to='/'>
+                        <button type='button'>
+                            Back to Login
+                        </button>
+                    </Link>
                 </div>
             </div>
         </div>

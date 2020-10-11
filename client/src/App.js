@@ -1,10 +1,11 @@
 import React from 'react';
+import { Switch, Route, withRouter } from 'react-router-dom';
+
+import Navigation from './components/nav/Navigation';
 import Homepage from './components/home/Homepage';
 import Login from './components/login/Login';
-import PostForm from './components/post/PostForm'
-// import { BrowserRouter, Route, Switch } from 'react-router-dom'
-import LoadingScreen from './components/home/LoadingScreen';
-import Register from './components/register/Register'
+import Register from './components/register/Register';
+import Trade from './components/trade/Trade';
 
 class App extends React.Component {
   constructor(props) {
@@ -15,11 +16,10 @@ class App extends React.Component {
         latestPrivate: {}, 
         latestPublic: {},
         isLoaded: false,
-        unauthorized: false,
         isAuth: false,
+        unauthorized: false,
         intervalRefreshID: '',
         token: '',
-        page: 'login',
         session:{
           username: '',
           email: '',
@@ -132,7 +132,6 @@ class App extends React.Component {
           this.setState({ 
             isAuth: true, 
             token: d.token, 
-            page: 'homepage',
             session: {
               username: data.username
             }
@@ -142,6 +141,7 @@ class App extends React.Component {
             this.loadData()
               .then((d) => {
                 console.log('Data Updated: ',d)
+                this.props.history.push("/account");
               })
               .catch(e => console.log('Unable to refresh/load data: ',e))
 
@@ -173,7 +173,7 @@ class App extends React.Component {
   }
 
   //Switch Pages
-  logout = (e) => {
+  logout = () => {
     clearInterval(this.state.intervalRefreshID);
     this.setState({
         tagTrades: [], 
@@ -181,11 +181,10 @@ class App extends React.Component {
         latestPrivate: {}, 
         latestPublic: {},
         isLoaded: false,
-        unauthorized: false,
         isAuth: false,
+        unauthorized: false,
         intervalID: '',
         token: '',
-        page: 'login',
         session:{
           username: '',
           email: '',
@@ -195,50 +194,34 @@ class App extends React.Component {
           }
         }
     })
-  }
-
-  homePage = (e) => {
-    // e.preventDefault();
-    this.setState({
-      page: 'homepage'
-    })
-  }
-
-  postForm = (e) => {
-    // e.preventDefault();
-    this.setState({
-      page: 'postform'
-    })
-  }
-
-  register = (e) => {
-    // e.preventDefault();
-    this.setState({
-      page: 'register'
-    })
+    this.props.history.push("/");
   }
 
   render(){
-    if(this.state.isAuth) {
-      switch (this.state.page) {
-        case 'homepage':
-          return this.state.isLoaded ? <Homepage { ...this.state } logout={this.logout} postform={this.postForm}/> : <LoadingScreen />
-        case 'postform':
-          return <PostForm token={this.state.token} logout={this.logout} homepage={this.homePage}/>
-        case 'register':
-          return <Register homepage={this.homePage}/>
-        default:
-          return <Login authMe={this.authMe} register={this.register}/>
-      }        
-    } else {
-      switch(this.state.page) {
-        case 'register':
-          return <Register homepage={this.homePage}/>
-        default:
-          return <Login authMe={this.authMe} register={this.register}/>
-      }
-    }
+    return (
+      <div className='app'>
+        <Navigation 
+          isLoaded={this.state.isLoaded} 
+          isAuth={this.state.isAuth}
+          unauthorized={ this.state.unauthorized}
+        />
+        <Switch>
+          <Route exact path="/">
+            <Login authMe={this.authMe} />
+          </Route>
+          <Route exact path="/register">
+            <Register />
+          </Route>
+          <Route exact path="/account">
+            <Homepage {...this.state} logout={this.logout}/>
+          </Route>
+          <Route exact path="/trade">
+            <Trade token={this.state.token} logout={this.logout}/>
+          </Route>
+        </Switch>
+      </div>
+    )
   }
 }
 
-export default App;
+export default withRouter(App);

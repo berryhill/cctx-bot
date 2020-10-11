@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import './login.css'
 
 const Login = (props) => {
-    const { authMe, register } = props
+    const { authMe } = props
 
     const [ username, setUsername ] = useState('')
     const [ password, setPassword ] = useState('')
@@ -22,12 +23,6 @@ const Login = (props) => {
             username,
             password
         })
-    }
-
-    const handleRegister = (e) => {
-        e.preventDefault();
-        console.log("Clicked Register Button!")
-        register()
     }
 
     return (
@@ -50,7 +45,11 @@ const Login = (props) => {
                     </div>
                     <h3>Want to Register?</h3>
                     <div className='button-register'>
-                        <input type='submit' value='Create Account' onClick={handleRegister}/>
+                        <Link to='/register'>
+                            <button type="button">
+                                Create Account
+                            </button>
+                        </Link>
                     </div>
                 </div>
             </div>

@@ -1,0 +1,51 @@
+.trade-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: darkgrey;
+}
+
+.title {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+#form {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-around;
+    width: 50%;
+    margin-bottom: 15px;
+    padding: 5px;
+}
+
+.form-group div {
+    margin: 5px;
+    
+}
+
+.form-group .buttons {
+    display: flex;
+    flex-direction: row;
+}
+
+.form-group .buttons input {
+    margin-right: 10px;
+}
+
+#link {
+    margin-right: 10px;
+    text-decoration: none;
+
+}
+
+.table {
+    margin-top: 30px;
+    display: flex;
+    flex-direction: column;
+    width: 75%;
+}
+
+label {
+    font-weight: bold;
+}

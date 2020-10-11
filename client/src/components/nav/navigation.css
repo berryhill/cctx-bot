@@ -1,0 +1,37 @@
+.link {
+    text-decoration: none;
+    color: black;
+    font-weight: bold;
+    background-color: lightblue;
+    padding: 5px;
+    border-radius: 8px;
+}
+
+.link:hover {
+    opacity: 75%;
+    font-size: 105%;
+}
+
+ul {
+    list-style-type: none;
+}
+
+.title {
+    color: white;
+}
+
+.navigation {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 0px 35px;
+    background-color: darkslategrey;
+}
+
+.nav-links {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-evenly;
+    width: 400px;
+    margin-top: 25px;
+}
