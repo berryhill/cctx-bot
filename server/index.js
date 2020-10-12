@@ -869,7 +869,7 @@ async function main(app) {
     //GET LINKS FROM EXPRESS
     //GET - React Index.js
     app.get('/', async function (req, res) {
-        res.sendFile(path.resolve("./../build/public/index.html"));
+        res.sendFile(path.resolve(__dirname+"./../build/public/index.html");));
         // res.sendFile('public/index.html', {root: './../build/'});
         expressLog.print('Request','/ requested')
     })
