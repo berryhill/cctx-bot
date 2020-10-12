@@ -5,7 +5,7 @@ const postSchema = new Schema({
     "s": {
         type: String,
         required: true,
-        enum: ['XBTUSD','XRPUSD','ETHUSD'],
+        enum: ['XBTUSD','XRPUSD','ETHUSD','LTCUSD','BCHUSD'],
         message: {
             type: 'Symbol must be a string.',
             required: 'Symbol is required.'
