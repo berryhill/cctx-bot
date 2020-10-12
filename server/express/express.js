@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
-const Logger = require('./logger');
-const color = require('./colors');
+const Logger = require('./../utils/logger');
+const color = require('./../utils/colors');
 const log = new Logger('Express',color.pick.magenta);
 const path = require('path')
 

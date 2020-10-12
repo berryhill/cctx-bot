@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './trade.css'
 
-const Trade = ({ token, logout }) => {
+const Trade = ({ token }) => {
     const [symbol, setSymbol] = useState('XBTUSD')
     const [command, setCommand] = useState('B')
     const [type, setType] = useState('M')
@@ -172,7 +172,6 @@ const Trade = ({ token, logout }) => {
                     </div>
                     <div className='buttons'>
                         <input type="submit" value="Submit" onClick={onSubmit}/>
-                        <input type='submit' value='Logout' onClick={ logout }/>
                     </div>
                 </div>
             </form>

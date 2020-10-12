@@ -203,7 +203,9 @@ class App extends React.Component {
         <Navigation 
           isLoaded={this.state.isLoaded} 
           isAuth={this.state.isAuth}
-          unauthorized={ this.state.unauthorized}
+          unauthorized={this.state.unauthorized}
+          logout={this.logout}
+          username={this.state.session.username}
         />
         <Switch>
           <Route exact path="/">

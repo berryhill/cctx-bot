@@ -1,13 +1,13 @@
 const WebSocket = require('ws');
-const Logger = require('./logger')
+const Logger = require('./../utils/logger')
 const log = new Logger('WebSocket')
-const color = require('./colors')
+const color = require('./../utils/colors')
 
 module.exports = function BitmexWS(verbose) {
     try {
         this.verbose = verbose
         this.ws = new WebSocket('wss://www.bitmex.com/realtime');
-        this.instrumentsSubscribe = ["XBTUSD","ETHUSD","XRPUSD"]
+        this.instrumentsSubscribe = ["XBTUSD","ETHUSD","XRPUSD","LTCUSD","BCHUSD"]
         this.latest = {
             startTime: new Date,
             instruments: {}

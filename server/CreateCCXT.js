@@ -1,5 +1,5 @@
 const ccxt = require('ccxt');
-const Logger = require('./logger')
+const Logger = require('./utils/logger')
 
 
 module.exports = function CreateCCXT(apiKey,apiSecret, name) {

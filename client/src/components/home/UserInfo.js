@@ -15,7 +15,7 @@ const UserInfo = ({ unauthorized, margin, session, instruments }) => {
                     <p><b>Free:</b> <i>{ toBitcoin( margin[session.username][0]['availableMargin'] )} BTC</i></p>
                     <p><b>Used:</b> <i>{ toBitcoin( margin[session.username][0]['maintMargin'] )} BTC</i></p>
                     <p><b>Total:</b> <i>{ toBitcoin( margin[session.username][0]['marginBalance'] )} BTC</i></p>
-                </div> : 'Limited Mode - Not showing user info'
+                </div> : <div><p>Limited Mode</p><p>Not showing user info</p></div>
             }
             <div className='info-price'>
                 <p><b>More Information</b></p>

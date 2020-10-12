@@ -10,24 +10,24 @@ import LimitOrder from './LimitOrder';
 import './homepage.css';
 
 const Homepage = (props) => {
-    const { tagTrades, tpOrders, latestPublic , session, logout, unauthorized } = props
+    const { tagTrades, tpOrders, latestPublic , session, unauthorized } = props
     const { instruments } = latestPublic
 
-    const buildOrderTable = () => (
-        props.latestPrivate['order'][session.username].map((pos) => {
-            const { symbol, currency, currentQty, liquidationPrice } = pos
+    // const buildOrderTable = () => (
+    //     props.latestPrivate['order'][session.username].map((pos) => {
+    //         const { symbol, currency, currentQty, liquidationPrice } = pos
 
-            //Return table element for current symbol
-            return (
-                <tr key={symbol}>
-                    <td>{symbol}</td>
-                    <td>{currentQty}</td>
-                    <td>{currency}</td>
-                    <td>{liquidationPrice}</td>
-                </tr>
-            )
-        })
-    )
+    //         //Return table element for current symbol
+    //         return (
+    //             <tr key={symbol}>
+    //                 <td>{symbol}</td>
+    //                 <td>{currentQty}</td>
+    //                 <td>{currency}</td>
+    //                 <td>{liquidationPrice}</td>
+    //             </tr>
+    //         )
+    //     })
+    // )
 
     return (
         props.isLoaded ? 
@@ -36,23 +36,11 @@ const Homepage = (props) => {
                 <div className='top-title'>
                     <h1>All Trades Listed Since Online</h1>
                     <UserInfo
-                    className='user-info'
-                    unauthorized={unauthorized} 
-                    margin={props.latestPrivate.margin}
-                    session={session}
-                    instruments={instruments}
-                />
-                </div>
-                <div className='buttons'>
-                    <h4>Logged in as <b>{session['username']} {!unauthorized ? 'with Admin rights' : 'in Limited Mode'}</b></h4>
-                    <input 
-                        type="button" 
-                        onClick={(e) => {
-                                e.preventDefault();
-                                console.log("Clicked Logout Button!")
-                                logout()
-                            }} 
-                        value="Logout"
+                        className='user-info'
+                        unauthorized={unauthorized} 
+                        margin={props.latestPrivate.margin}
+                        session={session}
+                        instruments={instruments}
                     />
                 </div>
             </div>

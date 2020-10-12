@@ -1,4 +1,3 @@
 server/.env
 server/node_modules
-server/registered.json
 client/node_modules

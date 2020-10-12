@@ -1,19 +1,18 @@
 require('dotenv').config();
-const Schema = require('validate');
-const { User, database } = require('./MongoDB')
+
+const MongoDB = require('./database/MongoDB');
+const { User } = require('./database/MongoDB');
+const postSchema = require('./validation/postSchema');
 const CreateCCXT = require('./CreateCCXT');
-const BitmexStream = require('./wss_stream');
-const streamPrivate = require('./wss_auth_md')
-const ExpressServer = require('./express')
-const express = new ExpressServer()
-const stream = new BitmexStream(false)
-const fs = require('fs')
-const path = require('path')
+const BitmexStream = require('./wss/wss_stream');
+const streamPrivate = require('./wss/wss_auth_md');
+const ExpressServer = require('./express/express');
+const express = new ExpressServer();
+const stream = new BitmexStream(false);
 
 //Loggers and Color
-const color = require('./colors')
-const Logger = require('./logger');
-const MongoDB = require('./MongoDB');
+const color = require('./utils/colors')
+const Logger = require('./utils/logger');
 const readFileLog = new Logger('Read User File',color.pick.bold)
 const mainLog = new Logger('Main Program',color.rgbFont(255,194,0))
 const expressLog = new Logger('Express',color.pick.magenta)
@@ -31,96 +30,6 @@ Supported Values for every key
 * a: ANY (Min 3 charts, a-z-A-Z-0-9)   <Type:string>
 ** code: 13131 - Used for Authentication of Post Form! <Type:string>
 */
-
-//Defines what is allowed/format of what we expect to receive tot the POST end of CCXT on the Webserver. Validation of data.
-const postSchema = new Schema({
-    "s": {
-        type: String,
-        required: true,
-        enum: ['XBTUSD','XRPUSD','ETHUSD'],
-        message: {
-            type: 'Symbol must be a string.',
-            required: 'Symbol is required.'
-            }
-        },
-    "c": {
-        type:String,
-        required: true,
-        enum: ['B','S','CL','CS'],
-        message: {
-            type: 'Side must be a string.',
-            required: 'Side is required.'
-            }
-    },
-    "t": {
-        type: String,
-        required: true,
-        enum: ['M','L'],
-        message: {
-            type: 'Order Type must be a string.',
-            required: 'Order Type is required.'
-            }
-        },
-    "tag": {
-        type: String,
-        required: false,
-        match: /^[a-zA-Z0-9]{1,}$/,
-        message: {
-            type: 'Tag must be a string.',
-            required: 'Tag is required.'
-            }
-    },
-    "tp": {
-        //Target Price from Entry
-        type: String,
-        required: false,
-        match: /^[0-9]{1,}%$|^[0-9]{1,3}\.[0-9]{1,3}%$/,
-        message: {
-            type: 'TP must be a string.',
-            required: 'TP is required.'
-            }
-    },
-    "p": {
-        //Defined Entry Price, in % from market price or +-5 USD from market price
-        type: String,
-        required: false,
-        match: /^[0-9]{1,}%$|^[0-9]{1,5}\.[0-9]{1,3}%$|^\+?-?[0-9]{1,}$/,
-        message: {
-            type: 'TP must be a string.',
-            required: 'TP is required.'
-            }
-    },
-    "q": {
-        //>0.0025 XBT
-        type: String,
-        required: true,
-        match: /^[0-9]{1,}XBT|^[0-9]{1,5}\.[0-9]{1,4}XBT|^auto/,
-        message: {
-            type: 'Amount must be a string.',
-            required: 'Amount is required.'
-            }
-    },
-    "a": {
-        //Account
-        type: String,
-        required: true,
-        match: /^[a-zA-Z0-9]{3,}$/,
-        message: {
-            type: 'Account must be a string.',
-            required: 'Account is required.'
-            }
-    },
-    "code": {
-        //Code
-        type: String,
-        required: true,
-        match: /^13131$/,
-        message: {
-            type: 'Code must be a string.',
-            required: 'Code is required.'
-            }
-    }
-});
 
 //Global Variables
 const users = {}
@@ -162,6 +71,10 @@ async function main(app) {
                     return 'XRP/USD'
                 case 'ETHUSD':
                     return 'ETH/USD'
+                case 'LTCUSD':
+                    return 'LTC/USD'
+                case 'BCHUSD':
+                    return 'BCH/USD'
                 default:
                     return 'BTC/USD'
             }
@@ -177,17 +90,27 @@ async function main(app) {
 
             switch(symbol) {
                 case 'BTC/USD':
-                    // 11249 BTC/USD
+                    // 11249 BTC/USD Minimum Price Increment	0.5 USD 
                     val = parseFloat(Math.ceil(price));
                     console.log('BTC/USD Resolved Order Price: ',val)
                     return val
                 case 'XRP/USD':
-                    // 1.2314 XRP/USD
+                    // 0,2314 XRP/USD Minimum Price Increment	0.0001 USD 
                     val = parseFloat(price.toFixed(4))
                     console.log('XRP/USD Resolved Order Price: ',val)
                     return val
                 case 'ETH/USD':
-                    // 1.2314 ETH/USD
+                    // 1.2314,2 ETH/USD Minimum Price Increment	0.05 USD 
+                    val = parseFloat(round(price,1))
+                    console.log('ETH/USD Resolved Order Price: ',val)
+                    return val
+                case 'LTC/USD':
+                    // 10,23 LTC/USD Minimum Price Increment 0.01 USD 
+                    val = parseFloat(round(price,2))
+                    console.log('ETH/USD Resolved Order Price: ',val)
+                    return val
+                case 'BCH/USD':
+                    // 301,9 ETH/USD Minimum Price Increment	0.05 USD 
                     val = parseFloat(round(price,1))
                     console.log('ETH/USD Resolved Order Price: ',val)
                     return val
@@ -201,20 +124,30 @@ async function main(app) {
             let val;
             let price;
             switch(symbol){
-                case 'BTC/USD':
+                case 'BTC/USD': //1 USD (Currently 0.00008778 XBT per contract)
                     price = entryPrice ? entryPrice : stream.latest.instruments['XBTUSD'].lastPrice
                     val = Math.ceil(xbtValue * price)
                     console.log('BTC/USD resolvedContracts: ',val,'price: ',price)
                     return val
-                case 'XRP/USD':
+                case 'XRP/USD': //0.0002 XBT per 1 USD (Currently 0.00005109 XBT per contract)
                     price = entryPrice ? (0.0002 * entryPrice) : (0.0002 * stream.latest.instruments['XRPUSD'].lastPrice)
                     val = Math.ceil(xbtValue / price)
                     console.log('XRP/USD resolvedContracts: ',val,'price: ',price)
                     return val
-                case 'ETH/USD':
+                case 'ETH/USD': //0.001 mXBT per 1 USD (Currently 0.00037427 XBT per contract)
                     price = entryPrice ? (0.000001 * entryPrice) : ( 0.000001 * stream.latest.instruments['ETHUSD'].lastPrice)
                     val = Math.ceil(xbtValue / price)
                     console.log('ETH/USD resolvedContracts: ',val,'price: ',price)
+                    return val
+                case 'LTC/USD': //0.002 mXBT per 1 USD (Currently 0.00010027 XBT per contract)
+                    price = entryPrice ? (0.000002 * entryPrice) : ( 0.000002 * stream.latest.instruments['LTCUSD'].lastPrice)
+                    val = Math.ceil(xbtValue / price)
+                    console.log('LTC/USD resolvedContracts: ',val,'price: ',price)
+                    return val
+                case 'BCH/USD': //0.001 mXBT per 1 USD (Currently 0.00023979 XBT per contract)
+                    price = entryPrice ? (0.000001 * entryPrice) : ( 0.000001 * stream.latest.instruments['BCHUSD'].lastPrice)
+                    val = Math.ceil(xbtValue / price)
+                    console.log('BCH/USD resolvedContracts: ',val,'price: ',price)
                     return val
                 default:
                     console.log('[ERROR]: Unsupported symbol for resolveQnt.')
@@ -890,49 +823,43 @@ async function main(app) {
     await streamPrivate.startWebSocketMD()
     
     async function initCCXTUsers() {
-        return new Promise((resolve,reject) => {
-            fs.readFile('registered.json', (err,data) => {
-                readFileLog.print('Loading','Getting users keys from file')
+        return new Promise((resolve, reject) => {
+            let usersProcessed = 0;
 
+            User.find({}, (err,dbUsers) => {
+                const gotAPI = dbUsers.filter(u => u.apiKey && u.apiSecret)
+                console.log('Users without API keys: ',dbUsers.length - gotAPI.length)
                 if(err) {
-                    readFileLog.print('Error','Failed to read file!')
                     reject(err)
                 } else {
-                    readFileLog.print(`${color.pick.green}FINISHED${color.pick.end}`,"All users loaded in 'users' variable")
-                    const d = JSON.parse(data)
-                    let usersProcessed = 0;
-    
-                    Object.keys(d).forEach(async (name,index, array) => {
-                        users[name] = {
-                            name: name,
-                            apiKey: d[name]['apiKey'],
-                            apiSecret: d[name]['apiSecret'],
+                    gotAPI.forEach(async user => {
+                        users[user.username] = {
+                            name: user.username,
+                            apiKey: user.apiKey,
+                            apiSecret: user.apiSecret,
                             ccxt: null
                         }
-    
-                        users[name]['ccxt'] = new CreateCCXT(d[name]['apiKey'],d[name]['apiSecret'], name)
-                        // console.log(users)
-                        await users[name]['ccxt'].init().then(()=> usersProcessed++).catch(e => reject(name,'Failed to load ccxt:',e))
-                        
-                        let isLoaded = usersProcessed === Object.keys(users).length
+                        users[user.username]['ccxt'] = new CreateCCXT(user.apiKey,user.apiSecret, user.username)
+                        await users[user.username]['ccxt'].init().then(()=> usersProcessed++).catch(e => reject(user.username,'Failed to load ccxt:',e))
+                        let isLoaded = usersProcessed === gotAPI.length
                         ccxtLog.print('Initializing',`${usersProcessed} CCXT user(s) loaded and initialized... - isLoaded: ${isLoaded}`)
 
-                        if(usersProcessed===array.length) {
+                        if(usersProcessed===gotAPI.length) {
                             resolve('all ccxt initialized')
                         }
-
-                    })                 
-    
-                    
+                    })
                 }
-            })
+            }).lean()
         })
     }
 
     //3. Create ccxt instances for all users
     //4. Start Main Program
     await initCCXTUsers()
-        .then(() => main(app))
+        .then(() => {
+            mainLog.print('Starting main app!')
+            main(app)
+        })
         .catch(e => {
             readFileLog.print(`${color.pick.red}FATAL${color.pick.end}`,`Error initializeUsers: ${e}`)
             readFileLog.print(`${color.pick.red}FATAL${color.pick.end}`,`DEFAULT REJECTING ALL TRADES BEFORE FIXED`)

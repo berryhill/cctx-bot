@@ -1,13 +1,15 @@
 //Imports
 const WebSocket = require('ws');
-const genSignature = require('./genSignature')
+const genSignature = require('./../utils/genSignature')
 const crypto = require('crypto');
-const fs = require('fs');
 
 //Logger
-const color = require('./colors');
-const Logger = require('./logger')
+const color = require('./../utils/colors');
+const Logger = require('./../utils/logger');
 const log = new Logger('WSS-MD',color.pick.underlined)
+
+//User model
+const { User } = require('../database/MongoDB');
 
 
 const latest = {
@@ -33,28 +35,20 @@ async function startWebSocketMD() {
 
         async function loadUsers() {
             return new Promise((resolve,reject) => {
-                const resolveIt = (data) => resolve(data)
-                const rejectIt = (error) => reject(error)
-                fs.readFile('registered.json', (err,data) => {
+                User.find({}, (err,data) => {
                     if(err) {
-                        log.print('Error','Failed to load users from file!')
-                        rejectIt(err)
-                    } else if (data) {
-                        log.print('SUCCESS','Loaded users from file into object')
-                        resolveIt(JSON.parse(data))
+                        reject(err)
+                    } else {
+                        resolve(data)
                     }
-                })
+                }).lean()
             })
         }
 
         log.print('FILE','Loading Users WSS-MD...')
         const users = await loadUsers()
-                                .then(d => {
-                                    Object.keys(d).forEach(user => {
-                                        d[user]['name'] = user
-                                    })
-                                    log.print('Processing','Adding Name(s) in user object..')
-                                    return d
+                                .then(data => {
+                                    return data.filter(u => u.apiKey && u.apiSecret)
                                 }).catch(e => { 
                                     log.print('Error','Failed add name(s) in user object!')
                                     reject(d)
@@ -90,7 +84,7 @@ async function startWebSocketMD() {
 
             function loginAndSubscribe(user, subArgs){
                 let uniqueID = crypto.createHash('md5').update(user.apiKey).digest('hex');
-                let topic = user.name
+                let topic = user.username
                 wss.send(createStream(uniqueID,topic))
                 wss.send(authStream(uniqueID,topic,genSignature(user.apiKey,user.apiSecret)))
                 wss.send(subPrivate(uniqueID,topic,{"op": "subscribe", "args": subArgs}))
@@ -99,8 +93,8 @@ async function startWebSocketMD() {
             // loginAndSubscribe(users.ThreeSteps,["execution", "order", "margin", "position", "wallet"])
             log.print('Initialzing','Authenticating every users private stream...')
             log.print('Initialzing','Subscribing users to channels...')
-            Object.keys(users).forEach(key => {
-                const user = users[key]
+            // console.log('Users: ',users)
+            users.forEach(user => {
                 loginAndSubscribe(user,["execution", "order", "margin", "position", "wallet"])
             })
 

@@ -15,7 +15,6 @@ const user = new Schema({
 
 module.exports = {
     User: mongoose.model('User', user),
-
     database: mongoose.connect(process.env.DB_URL, {
         useNewUrlParser: true,
         useUnifiedTopology: true,

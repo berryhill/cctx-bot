@@ -2,17 +2,27 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import './navigation.css'
 
-const Navigation = ({isLoaded,isAuth,unauthorized}) => {
+const Navigation = ({isLoaded,isAuth,unauthorized,logout,username}) => {
     return (
         <div className='navigation'>
           <h2 className='title'>CCXT Trading Platform</h2>
+          { 
+            isLoaded && isAuth ?
+            <h2 style={{color:"red"}}>Logged in as <b>{username}</b> - {!unauthorized ? 'with Admin rights' : 'in Limited Mode'} </h2> : ''
+          }
           <ul className='nav-links'>
-            <li key='login'>
-              <Link className='link' to='/'>Login</Link>
-            </li>
-            <li key='register'>
-              <Link className='link' to='/register'>Register</Link>
-            </li>
+            {
+              (!isLoaded && !isAuth) ?
+              <>
+                <li key='login'>
+                  <Link className='link' to='/'>Login</Link>
+                </li>
+                <li key='register'>
+                  <Link className='link' to='/register'>Register</Link>
+                </li>
+              </>
+              : ''
+            }
             { 
               isLoaded && isAuth && !unauthorized ?
               <>
@@ -23,6 +33,17 @@ const Navigation = ({isLoaded,isAuth,unauthorized}) => {
                   <Link className='link' to='/trade'>Create Trade</Link>
                 </li>
               </> : ''
+            }
+            {
+              isLoaded && isAuth ?
+              <>
+                <li key='logout'>
+                  <div className='div-logout' onClick={() => logout()}>
+                    Logout
+                  </div>
+                </li>
+              </>
+              : ''
             }          
           </ul>
         </div>

@@ -22,6 +22,7 @@ const Position = ({ latestPrivate, session, unauthorized}) => {
     }
     
     return (
+        !unauthorized ?
         <div>
             <h3>Position Data</h3>
             <table>
@@ -41,6 +42,7 @@ const Position = ({ latestPrivate, session, unauthorized}) => {
                 }
             </table>
         </div>
+        : ''
     )
 }
 

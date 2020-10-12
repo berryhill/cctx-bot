@@ -26,7 +26,7 @@ const Login = (props) => {
     }
 
     return (
-        <div className='container'>
+        <div className='container-login'>
             <div className='menu'>
                 <div className='box'>
                     <h2>Login Screen</h2>
