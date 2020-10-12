@@ -9,7 +9,7 @@ const streamPrivate = require('./wss/wss_auth_md');
 const ExpressServer = require('./express/express');
 const express = new ExpressServer();
 const stream = new BitmexStream(false);
-// const path = require('path')
+const path = require('path')
 
 //Loggers and Color
 const color = require('./utils/colors')
