@@ -9,7 +9,7 @@ const streamPrivate = require('./wss/wss_auth_md');
 const ExpressServer = require('./express/express');
 const express = new ExpressServer();
 const stream = new BitmexStream(false);
-const path = require('path')
+const path = require('path');
 
 //Loggers and Color
 const color = require('./utils/colors')
@@ -869,8 +869,7 @@ async function main(app) {
     //GET LINKS FROM EXPRESS
     //GET - React Index.js
     app.get('/', async function (req, res) {
-        res.sendFile(path.resolve(__dirname+"./../build/public/index.html"));
-        // res.sendFile('public/index.html', {root: './../build/'});
+        res.sendFile(path.resolve(__dirname+"./build/public/index.html"));
         expressLog.print('Request','/ requested')
     })
 
