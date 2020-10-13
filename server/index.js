@@ -119,12 +119,12 @@ async function main(app) {
                 case 'LTC/USD':
                     // 10,23 LTC/USD Minimum Price Increment 0.01 USD 
                     val = parseFloat(round(price,2))
-                    console.log('ETH/USD Resolved Order Price: ',val)
+                    console.log('LTC/USD Resolved Order Price: ',val)
                     return val
                 case 'BCH/USD':
                     // 301,9 ETH/USD Minimum Price Increment	0.05 USD 
                     val = parseFloat(round(price,1))
-                    console.log('ETH/USD Resolved Order Price: ',val)
+                    console.log('BCH/USD Resolved Order Price: ',val)
                     return val
                 default:
                     console.log('Unsupported Symbol to resolve decimals!')
@@ -440,6 +440,8 @@ async function main(app) {
                     //MARKET ORDER SUCCESS CONTINUE LIMIT ORDER
                     //Calculate TP (price * tp%) = limit order price
                     
+                    // console.log('Amount of Contracts: ',data.amount)
+
                     //3. Price from Market Order
                     const orderPrice = data.price 
                     
@@ -452,11 +454,8 @@ async function main(app) {
                     //Push into array because of success, if limit tp fails it will still be recorded otherwise not.
                     pushTagTrades(tag,data,input)
 
-                    //Calculate Contracts Limit Order! Buy Limit Order buys more contracts at lower price.
-                    const qntyUSD2 = resolveContracts(qntyXBT,symbol,entryPrice)
-
                     //6. Opposite Side Trade Limit Order
-                    trade.limitBuyOrder(symbol,qntyUSD2,entryPrice).then(function (data_limit){
+                    trade.limitBuyOrder(symbol,qntyUSD,entryPrice).then(function (data_limit){
                         console.log('CCXT - Bitmex Buy Limit Order (TP) Complete: ', new Date)
                         //7. Success - Send OK from Server 2 trades (market+limit) success!
                         pushTagLimitTrades(tag,data_limit,input)
@@ -501,11 +500,8 @@ async function main(app) {
                     //Push into array because of success, if limit tp fails it will still be recorded otherwise not.
                     pushTagTrades(tag,data,input)
 
-                    //Calculate Contracts Limit Order.
-                    const qntyUSD2 = resolveContracts(qntyXBT,symbol,entryPrice)
-
                     //6. Opposite Side Trade Limit Order
-                    trade.limitSellOrder(symbol,qntyUSD2,entryPrice).then(function (data_limit){
+                    trade.limitSellOrder(symbol,qntyUSD,entryPrice).then(function (data_limit){
                         console.log('CCXT - Bitmex Sell Limit Order (TP) Complete: ', new Date)
                         //7. Success - Send OK from Server 2 trades (market+limit) success!
                         pushTagLimitTrades(tag,data_limit,input)
@@ -633,11 +629,8 @@ async function main(app) {
                     //Push both limit trades, first one now in case tp fails
                     pushTagLimitTrades(tag,data,input)
 
-                    //Calculate Contracts for TP Limit Order
-                    const qntyUSD2 = resolveContracts(qntyXBT,symbol,entryPrice)
-
                     //6. Opposite Side Trade Limit Order - Has to be a POST order
-                    trade.limitBuyOrder(symbol,qntyUSD2,entryPrice, {}).then(function (data_limit){
+                    trade.limitBuyOrder(symbol,qntyUSD,entryPrice, {}).then(function (data_limit){
                         console.log('CCXT - Bitmex Buy Limit Order (TP) Complete: ', new Date)
                         //7. Success - Send OK from Server 2 trades (limit+limit) success!
                         pushTagLimitTrades(tag,data_limit,input)
@@ -683,11 +676,8 @@ async function main(app) {
                     //Push both limit trades, first one now in case tp fails
                     pushTagLimitTrades(tag,data,input)
 
-                    //Calculate Contracts for TP Limit Order
-                    const qntyUSD2 = resolveContracts(qntyXBT,symbol,entryPrice)
-
                     //6. Opposite Side Trade Limit Order - Has to be a POST order
-                    trade.limitSellOrder(symbol,qntyUSD2,entryPrice, {}).then(function (data_limit){
+                    trade.limitSellOrder(symbol,qntyUSD,entryPrice, {}).then(function (data_limit){
                         console.log('CCXT - Bitmex Sell Limit Order (TP) Complete: ', new Date)
                         //7. Success - Send OK from Server 2 trades (limit+limit) success!
                         pushTagLimitTrades(tag,data_limit,input)
