@@ -62,7 +62,7 @@ const postSchema = new Schema({
         //>0.0025 XBT
         type: String,
         required: true,
-        match: /^[0-9]{1,}XBT|^[0-9]{1,5}\.[0-9]{1,4}XBT|^auto/,
+        match: /^[0-9]{1,}XBT$|^[0-9]{1,5}\.[0-9]{1,4}XBT$|^auto$/,
         message: {
             type: 'Amount must be a string.',
             required: 'Amount is required.'

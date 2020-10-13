@@ -32,10 +32,13 @@ Supported Values for every key
 ** code: 13131 - Used for Authentication of Post Form! <Type:string>
 */
 
+//Logging Variables
+const tradeVerbose = false
+
 //Global Variables
 const users = {}
 let tagTrades = []
-let tpOrders = []  
+let tpOrders = []
 
 //Return JSON-response from server (Mainly to Tradingview which POSTS to the Webhook.)
 const sendJSON = (res,statusCode, message, payload, error) => {
@@ -47,14 +50,18 @@ const sendJSON = (res,statusCode, message, payload, error) => {
     })
 }
 
-const getLevel = (amountBTC) => {
-    return Math.floor(log2(8*amountBTC))
-}
-
 //Define Main
 async function main(app) {
     //CREATING TRADES
     mainLog.print(`${color.pick.green}COMPLETE${color.pick.end}`,'Sequential startup complete ready to receive and make trades!')
+
+    const getLevel = (amountBTC) => {
+        return Math.floor(Math.log2(8*amountBTC))
+    }
+    
+    const calcMultiplier = (accLevel) => {
+        return +(1.25 ^ (accLevel-1))
+    }
 
     async function createTrade(input,alias,ccxt) {
         //CCXT Object from Logged in User
@@ -160,6 +167,18 @@ async function main(app) {
             }
         }
 
+        //
+        function getAutoQnty(defaultSize) {
+            let marginBalance = parseInt(streamPrivate.latest['margin'][alias][0]['marginBalance']) / 100000000
+            let calcMultiplierVal = +calcMultiplier(getLevel(marginBalance))
+            // console.log("streamPrivate.latest['margin'][alias]",streamPrivate.latest['margin'][alias])
+            console.log('getAutoQnty marginBalance: ', marginBalance)
+            console.log('calcMultiplier: ', calcMultiplierVal)
+            console.log('defaultSize (lvl1 BTC qnty - typically 0.0025XBT or 0.01XBT on testnet)',defaultSize)
+            console.log('getAutoQnty order size: ', calcMultiplierVal * defaultSize)
+            return calcMultiplierVal * defaultSize
+        }
+
         //Function to insert trades with specific tag & side
         function pushTagTrades(tag, data, input) {
             const side = data.side === 'sell' ? 'S' : 'B'
@@ -193,7 +212,7 @@ async function main(app) {
                     console.log("pushTagTrades unknown side: ",side)
                 }
 
-                console.log("tagTrades (after pushTrades): ", JSON.stringify(tagTrades,null,1) )
+                tradeVerbose ? console.log("tagTrades (after pushTrades): ", JSON.stringify(tagTrades,null,1) ) : ''
                 return
 
             } else {
@@ -208,7 +227,7 @@ async function main(app) {
                         console.log("pushTagTrades unknown side: ",side)
                     }
                     
-                    console.log("tagTrades (after pushTrades): ", JSON.stringify(tagTrades,null,1) )
+                    tradeVerbose ? console.log("tagTrades (after pushTrades): ", JSON.stringify(tagTrades,null,1) ) : ''
                     return
 
             }
@@ -248,7 +267,7 @@ async function main(app) {
                     console.log("pushTagTrades unknown side: ",side)
                 }
 
-                console.log("tpOrders (after pushLimitTrades): ", JSON.stringify(tpOrders,null,2) )
+                tradeVerbose ? console.log("tpOrders (after pushLimitTrades): ", JSON.stringify(tpOrders,null,2) ) : ''
                 return
 
             } else {
@@ -263,12 +282,11 @@ async function main(app) {
                         console.log("pushTagLimitTrades unknown side: ",side)
                     }
                     
-                    console.log("tpOrders (after pushLimitTrades): ", JSON.stringify(tpOrders,null,2) )
+                    tradeVerbose ? console.log("tpOrders (after pushLimitTrades): ", JSON.stringify(tpOrders,null,2) ) : ''
                     return
             }
             
         }
-
         //<---------------------END-----------------------> 
 
         //<---------------------TRADE FUNCTION SECTION-----------------------> 
@@ -276,7 +294,9 @@ async function main(app) {
         async function createMarketOrder(symbol,input) {
             //NO TP OR SL
             const command = input.c
-            const qntyXBT = +input.q.split('XBT')[0]
+            const regXBT = new RegExp(/XBT$/s)
+            const regAuto = new RegExp(/^auto$/s)
+            const qntyXBT = regXBT.test(input.q) ? +input.q.split('XBT')[0] : regAuto.test(input.q) ? +getAutoQnty(0.01) : 0.0025
             const tag = input.tag
 
             if(command === 'S') {
