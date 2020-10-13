@@ -421,7 +421,9 @@ async function main(app) {
         //Create a Market Order with TP (Additional Limit Order of Opposite Side)
         function createMarketTPOrder(symbol,input) {
             const command = input.c
-            const qntyXBT = +input.q.split('XBT')[0]
+            const regXBT = new RegExp(/XBT$/s)
+            const regAuto = new RegExp(/^auto$/s)
+            const qntyXBT = regXBT.test(input.q) ? +input.q.split('XBT')[0] : regAuto.test(input.q) ? +getAutoQnty(0.01) : 0.0025
             const tp = input.tp.slice(0, -1);
             const tag = input.tag
 
@@ -532,7 +534,9 @@ async function main(app) {
         //Create a Limit Order
         function createLimitOrder(symbol,input) {
             const command = input.c
-            const qntyXBT = +input.q.split('XBT')[0]
+            const regXBT = new RegExp(/XBT$/s)
+            const regAuto = new RegExp(/^auto$/s)
+            const qntyXBT = regXBT.test(input.q) ? +input.q.split('XBT')[0] : regAuto.test(input.q) ? +getAutoQnty(0.01) : 0.0025
             const priceOffset = +input.p.split('%')[0]
             const tag = input.tag
             const symbolPrice = stream.latest.instruments[input.s].lastPrice
@@ -590,7 +594,9 @@ async function main(app) {
         //Create a Limit Order with TP (Additional Limit Order of Opposite Side)
         function createLimitTPOrder(symbol,input) {
             const command = input.c
-            const qntyXBT = +input.q.split('XBT')[0]
+            const regXBT = new RegExp(/XBT$/s)
+            const regAuto = new RegExp(/^auto$/s)
+            const qntyXBT = regXBT.test(input.q) ? +input.q.split('XBT')[0] : regAuto.test(input.q) ? +getAutoQnty(0.01) : 0.0025
             const priceOffset = +input.p.split('%')[0]
             const tp = +input.tp.slice(0, -1);
             const tag = input.tag
