@@ -2,17 +2,18 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import './navigation.css'
 
-const Navigation = ({isLoaded,isAuth,unauthorized,logout,username}) => {
+const Navigation = ({isLoaded,isAuth, hasApiData ,logout,username}) => {
+
     return (
         <div className='navigation'>
           <h2 className='title'>CCXT Trading Platform</h2>
           { 
-            isLoaded && isAuth ?
-            <h2 style={{color:"red"}}>Logged in as <b>{username}</b> - {!unauthorized ? 'with Admin rights' : 'in Limited Mode'} </h2> : ''
+            isLoaded ?
+            <h2 style={{color:"red"}}>Logged in as <b>{username}</b> - {hasApiData ? 'and API initialized!' : 'in Limited Mode'} </h2> : ''
           }
           <ul className='nav-links'>
             {
-              (!isLoaded && !isAuth) ?
+              (!isLoaded) ?
               <>
                 <li key='login'>
                   <Link className='link' to='/'>Login</Link>
@@ -24,7 +25,7 @@ const Navigation = ({isLoaded,isAuth,unauthorized,logout,username}) => {
               : ''
             }
             { 
-              isLoaded && isAuth && !unauthorized ?
+              isLoaded && hasApiData ?
               <>
                 <li key='account'>
                   <Link className='link' to='/account'>My Account</Link>
@@ -35,7 +36,7 @@ const Navigation = ({isLoaded,isAuth,unauthorized,logout,username}) => {
               </> : ''
             }
             {
-              isLoaded && isAuth ?
+              isLoaded ?
               <>
                 <li key='logout'>
                   <div className='div-logout' onClick={() => logout()}>

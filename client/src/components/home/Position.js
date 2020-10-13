@@ -1,9 +1,11 @@
 import React from 'react'
 
-const Position = ({ latestPrivate, session, unauthorized}) => {
+const Position = ({ latestPrivate, unauthorized}) => {
+    let hasData = Object.keys(latestPrivate).length !== 0
+
     const buildPositionTable = () => {
-        if(!unauthorized) {
-            return latestPrivate['position'][session.username].map((pos) => {
+        if(hasData) {
+            return latestPrivate['position'].map((pos) => {
                 const { symbol, currency, currentQty, liquidationPrice } = pos
     
                 //Return table element for current symbol
@@ -22,7 +24,7 @@ const Position = ({ latestPrivate, session, unauthorized}) => {
     }
     
     return (
-        !unauthorized ?
+        hasData ?
         <div>
             <h3>Position Data</h3>
             <table>

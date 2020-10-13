@@ -10,7 +10,7 @@ import LimitOrder from './LimitOrder';
 import './homepage.css';
 
 const Homepage = (props) => {
-    const { tagTrades, tpOrders, latestPublic , session, unauthorized } = props
+    const { tagTrades, tpOrders, latestPublic } = props
     const { instruments } = latestPublic
 
     // const buildOrderTable = () => (
@@ -37,9 +37,7 @@ const Homepage = (props) => {
                     <h1>All Trades Listed Since Online</h1>
                     <UserInfo
                         className='user-info'
-                        unauthorized={unauthorized} 
-                        margin={props.latestPrivate.margin}
-                        session={session}
+                        latestPrivate={props.latestPrivate}
                         instruments={instruments}
                     />
                 </div>
@@ -47,8 +45,6 @@ const Homepage = (props) => {
             <div className='container-table'>
                 <Position 
                     className='table-position'
-                    unauthorized={unauthorized}
-                    session={session}
                     latestPrivate={props.latestPrivate}
                 />
                 <MarketOrder 

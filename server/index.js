@@ -1,7 +1,7 @@
 require('dotenv').config();
 
 const MongoDB = require('./database/MongoDB');
-const { User } = require('./database/MongoDB');
+const { User, TagTrades, TpOrders } = require('./database/MongoDB');
 const postSchema = require('./validation/postSchema');
 const CreateCCXT = require('./CreateCCXT');
 const BitmexStream = require('./wss/wss_stream');
@@ -38,13 +38,17 @@ let tagTrades = []
 let tpOrders = []  
 
 //Return JSON-response from server (Mainly to Tradingview which POSTS to the Webhook.)
-function sendJSON(res,statusCode, message, payload, error) {
+const sendJSON = (res,statusCode, message, payload, error) => {
     return res.json({
         statusCode: statusCode,
         message: message,
         payload: payload,
         error: error
     })
+}
+
+const getLevel = (amountBTC) => {
+    return Math.floor(log2(8*amountBTC))
 }
 
 //Define Main
@@ -910,6 +914,46 @@ async function main(app) {
             })
         }
         
+    })
+
+    app.get('/api/latest/private/:id', async function (req,res) {
+        const { authorization } = req.headers
+
+        User.findOne({ _id: authorization }).then(d => {
+            console.log('Database Response: ',d.username)
+            const username = d.username
+            const latest = streamPrivate.latest
+
+            if(d) {
+                const response = {
+                    // user: latest['users'].filter(u=>Object.keys(u)==username),
+                    affiliate: latest['affiliate'][username],
+                    execution: latest['execution'][username],
+                    order: latest['order'][username],
+                    margin: latest['margin'][username],
+                    position: latest['position'][username],
+                    transact: latest['transact'][username],
+                    wallet: latest['wallet'][username]
+                }
+                return res.json(response)
+            } else {
+                return res.json({
+                    statusCode: 403,
+                    message: 'Not authorized'
+                })
+            }
+        })
+
+        if(authorization !== '') {
+            // console.log('Received Token in Headers: ',authorization)
+            
+        } else {
+            console.log('No token provided')
+            return res.json({
+                statusCode: 403,
+                message: 'No token provided'
+            })
+        }
     })
 
     app.post('/register', async function(req,res) {

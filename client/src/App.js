@@ -17,7 +17,6 @@ class App extends React.Component {
         latestPublic: {},
         isLoaded: false,
         isAuth: false,
-        unauthorized: false,
         intervalRefreshID: '',
         token: '',
         session:{
@@ -74,14 +73,9 @@ class App extends React.Component {
       
 
       new Promise((resolve,reject) => {
-        fetch('/api/latest/private', getHeaders)
+        fetch(`/api/latest/private/${this.state.token}`, getHeaders)
           .then(d=>d.json())
           .then(latestPrivate =>  {
-            if(latestPrivate.statusCode === 403) {
-              this.setState({
-                unauthorized: true
-              })
-            }
             this.setState({
               latestPrivate,
             })
@@ -203,7 +197,7 @@ class App extends React.Component {
         <Navigation 
           isLoaded={this.state.isLoaded} 
           isAuth={this.state.isAuth}
-          unauthorized={this.state.unauthorized}
+          hasApiData={Object.keys(this.state.latestPrivate).length > 0}
           logout={this.logout}
           username={this.state.session.username}
         />
