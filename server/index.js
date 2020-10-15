@@ -61,7 +61,7 @@ async function main(app) {
     }
     
     const calcMultiplier = (accLevel) => {
-        return +(1.25 ^ (accLevel-1))
+        return 1 //+(1.25 ^ (accLevel-1))
     }
 
     async function createTrade(input,alias,ccxt) {
