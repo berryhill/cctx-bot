@@ -41,11 +41,11 @@ async function startWebSocketMD() {
                     } else {
                         resolve(data)
                     }
-                }).lean()
+                }).lean().catch(e => console.log(e))
             })
         }
 
-        log.print('FILE','Loading Users WSS-MD...')
+        log.print('FILTERING','Loading Users WSS-MD that have API keys...')
         const users = await loadUsers()
                                 .then(data => {
                                     return data.filter(u => u.apiKey && u.apiSecret)
@@ -53,6 +53,8 @@ async function startWebSocketMD() {
                                     log.print('Error','Failed add name(s) in user object!')
                                     reject(d)
                                 })
+        log.print('FILTERING','All users with API keys in users variable now.')
+
         
         // "affiliate",   // Affiliate status, such as total referred users & payout %
         // "execution",   // Individual executions; can be multiple per order

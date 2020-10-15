@@ -14,7 +14,7 @@ const postSchema = new Schema({
     "c": {
         type:String,
         required: true,
-        enum: ['B','S','CL','CS'],
+        enum: ['B','S','BT','ST','CL','CS'],
         message: {
             type: 'Side must be a string.',
             required: 'Side is required.'

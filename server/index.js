@@ -1,7 +1,7 @@
 require('dotenv').config();
 
 const MongoDB = require('./database/MongoDB');
-const { User, TagTrades, TpOrders } = require('./database/MongoDB');
+const { User, Trigger_Orders, TO_Processed } = require('./database/MongoDB');
 const postSchema = require('./validation/postSchema');
 const CreateCCXT = require('./CreateCCXT');
 const BitmexStream = require('./wss/wss_stream');
@@ -56,7 +56,8 @@ async function main(app) {
     mainLog.print(`${color.pick.green}COMPLETE${color.pick.end}`,'Sequential startup complete ready to receive and make trades!')
 
     const getLevel = (amountBTC) => {
-        return Math.floor(Math.log2(8*amountBTC))
+        let level = Math.floor(Math.log2(8*amountBTC))
+        return level < 1 ? 1 : level
     }
     
     const calcMultiplier = (accLevel) => {
@@ -71,10 +72,12 @@ async function main(app) {
         const command = input.c //B, S, CB, CS
         const type = input.t //M, L
         const tp = input.tp //For B & S
+        const p = input.p
 
         //<---------------------Conversions and Array Pushes-----------------------> 
         //Limit Decimals/Rounding for Exchange Opening Trades
         //Tradingview Symbol to CCXT Symbol
+        //FOR CCXT USE
         function resolveSymbol(symbol) {            
             switch(symbol) {
                 case 'XBTUSD':
@@ -93,6 +96,7 @@ async function main(app) {
         }
 
         //Trailing decimals of symbol
+        //*************ROUNDING FOR LONG ABOVE BUT FOR SHORT DOWN*************
         function resolveDecimals(price, symbol) {
             let val;
             function round(value, precision) {
@@ -287,6 +291,25 @@ async function main(app) {
             }
             
         }
+
+        //Trigger Market Orders to DB
+        function pushTriggerOrders(data, price, side) {
+            Trigger_Orders.create({
+                openTradeID: data.id,
+                symbol: input.s,
+                side: side,
+                contracts: data.amount,
+                price: price,
+                tag: input.tag,
+                account: alias
+            }).then(d => { 
+                console.log('Created TriggerOrder: ',d)
+                return { code: 200, message:'Success to process Market Trigger Order', input:input }
+            }).catch(e => { 
+                console.log('Failed to create triggerOrder: ',e)
+                return {code: 500, message:'Unable to process trade', input:input, e:e}
+            })
+        }
         //<---------------------END-----------------------> 
 
         //<---------------------TRADE FUNCTION SECTION-----------------------> 
@@ -299,11 +322,11 @@ async function main(app) {
             const qntyXBT = regXBT.test(input.q) ? +input.q.split('XBT')[0] : regAuto.test(input.q) ? +getAutoQnty(0.01) : 0.0025
             const tag = input.tag
 
+            //GET TICKER LAST PRICE
+            console.log("qntyXBT: ", qntyXBT)
+            const qntyUSD = resolveContracts(qntyXBT,symbol)
+            
             if(command === 'S') {
-                //GET TICKER LAST PRICE
-                console.log("qntyXBT: ", qntyXBT)
-                const qntyUSD = resolveContracts(qntyXBT,symbol)
-
                 // 2. Create Market Order
                 trade.marketSellOrder(symbol,qntyUSD).then(function (data) {
                     console.log('CCXT - Bitmex Sell Order Complete: ', new Date)
@@ -316,10 +339,6 @@ async function main(app) {
                 })
 
             } else if (command === 'B') {
-                //GET TICKER LAST PRICE
-                console.log("qntyXBT: ", qntyXBT)
-                const qntyUSD = resolveContracts(qntyXBT,symbol)
-
                 //2. Create Market Order
                 trade.marketBuyOrder(symbol,qntyUSD).then(function (data) {
                     console.log('CCXT - Bitmex Buy Order Complete: ', new Date)
@@ -334,7 +353,6 @@ async function main(app) {
                 })
 
             } else if (command === 'CB') {
-                const tag = input.tag
                 let tagIndex = 0
                 //TAG OBJECT IN ARRAY { tag: 'TAG', openTrades: [[{},{},{}], [{},{},{}]]}
                 tagTrades.forEach((obj) => {
@@ -374,7 +392,6 @@ async function main(app) {
                     tagIndex += 1
                 })
             } else if (command === 'CS') {
-                const tag = input.tag
                 let tagIndex = 0
                 //TAG OBJECT IN ARRAY { tag: 'TAG', openTrades: [[{},{},{}], [{},{},{}]]}
                 tagTrades.forEach((obj) => {
@@ -427,11 +444,11 @@ async function main(app) {
             const tp = input.tp.slice(0, -1);
             const tag = input.tag
 
-            if(command === 'S') {                
-                //1. Calculate USD amount
-                console.log("qntyXBT: ", qntyXBT)
-                const qntyUSD = resolveContracts(qntyXBT,symbol)
+            //1. Calculate USD amount
+            console.log("qntyXBT: ", qntyXBT)
+            const qntyUSD = resolveContracts(qntyXBT,symbol)
 
+            if(command === 'S') {                
                 //2. Create Market Order
                 trade.marketSellOrder(symbol,qntyUSD).then(function (data) {
                     console.log('CCXT - Bitmex Sell Order Complete: ', new Date)
@@ -476,10 +493,6 @@ async function main(app) {
                 })
 
             } else if (command === 'B') {
-                //GET TICKER LAST PRICE
-                console.log("qntyXBT: ", qntyXBT)
-                const qntyUSD = resolveContracts(qntyXBT,symbol)
-
                 //2. Create Market Order
                 trade.marketBuyOrder(symbol,qntyUSD).then(function (data) {
                     console.log('CCXT - Bitmex Buy Order Complete: ', new Date)
@@ -513,6 +526,118 @@ async function main(app) {
                         console.log("[3] Failed to submit Appended Limit Order: ",e)
                         return {code: 500, message:'Unable to process trade', input:input, e:e}
                     })
+                    
+                    //IF FIRST TRADE FAILS (MARKET ORDER)
+                }).catch(e => {
+                    //Send Server Error!
+                    console.log("[2] Failed to submit Market Order: ",e)
+                    return {code: 500, message:'Unable to process trade', input:input, e:e}
+                })
+
+            } else {
+                return {code: 400, message:'Unsupported Command with Order Type', input:input}
+            }
+        }
+
+        //Create a Trigger Market Order with P
+        function createMarketTriggerOrderP(symbol,input) {
+            const command = input.c
+            const regXBT = new RegExp(/XBT$/s)
+            const regAuto = new RegExp(/^auto$/s)
+            const qntyXBT = regXBT.test(input.q) ? +input.q.split('XBT')[0] : regAuto.test(input.q) ? +getAutoQnty(0.01) : 0.0025
+            const p = +input.p.slice(0, -1);
+            
+            //1. Calculate USD amount
+            const qntyUSD = resolveContracts(qntyXBT,symbol)
+            console.log("qntyXBT: ", qntyXBT)
+
+            const data = {
+                id: 'only-trigger',
+                amount: qntyUSD
+            }
+
+            if(command === 'ST') {               
+                 
+                //Is a % from Market Price! input.s is bitmex symbol, where as symbol is resovled for CCXT
+                const entryPrice = resolveDecimals(stream.latest.instruments[input.s].lastPrice * ( 1 + (p / 100)), symbol)
+
+                //Create Trigger Market Order
+                pushTriggerOrders(data,entryPrice,'S')
+                    
+            } else if (command === 'BT') {
+                //Is a % from Market Price! input.s is bitmex symbol, where as symbol is resovled for CCXT
+                const entryPrice = resolveDecimals(stream.latest.instruments[input.s].lastPrice * ( 1 - (p / 100)), symbol)
+
+                //Create Trigger Market Order
+                pushTriggerOrders(data,entryPrice,'B')
+
+            } else {
+                return {code: 400, message:'Unsupported Command with Order Type', input:input}
+            }
+        }
+        
+        //Create a Market Order with TP (Additional Limit Order of Opposite Side)
+        function createMarketTriggerOrderTP(symbol,input) {
+            const command = input.c
+            const regXBT = new RegExp(/XBT$/s)
+            const regAuto = new RegExp(/^auto$/s)
+            const qntyXBT = regXBT.test(input.q) ? +input.q.split('XBT')[0] : regAuto.test(input.q) ? +getAutoQnty(0.01) : 0.0025
+            const tp = input.tp.slice(0, -1);
+
+            //1. Calculate USD amount
+            console.log("qntyXBT: ", qntyXBT)
+            const qntyUSD = resolveContracts(qntyXBT,symbol)
+
+            if(command === 'ST') {                
+                //2. Create Market Order
+                trade.marketSellOrder(symbol,qntyUSD).then(function (data) {
+                    console.log('CCXT - Bitmex Sell Order Complete: ', new Date)
+                    console.log('CCXT - Bitmex executing addition limit order tp...: ', new Date)
+                    
+                    //MARKET ORDER SUCCESS CONTINUE LIMIT ORDER
+                    //Calculate TP (price * tp%) = limit order price
+                    
+                    // console.log('Amount of Contracts: ',data.amount)
+
+                    //3. Price from Market Order
+                    const orderPrice = data.price 
+                    
+                    //4. Calculate TP based on Entry Price
+                    const tp_price = (orderPrice * ((100 - parseFloat(tp))/100))
+                    
+                    //5. Fix Decimals
+                    const entryPrice = resolveDecimals(tp_price, symbol)
+                    
+                    //Create Trigger Market Order
+                    pushTriggerOrders(data,entryPrice,'B')
+                    
+                    //IF FIRST TRADE FAILS (MARKET ORDER)
+                }).catch(e => {
+                    //Send Server Error!
+                    console.log("[2] Failed to submit Market Order: ",e)
+                    return {code: 500, message:'Unable to process trade', input:input, e:e}
+                })
+
+            } else if (command === 'BT') {
+                //2. Create Market Order
+                trade.marketBuyOrder(symbol,qntyUSD).then(function (data) {
+                    console.log('CCXT - Bitmex Buy Order Complete: ', new Date)
+                    console.log('CCXT - Bitmex executing addition limit order tp...: ', new Date)
+                    
+                    //MARKET ORDER SUCCESS CONTINUE LIMIT ORDER
+                    //Calculate TP (price * tp%) = limit order price
+                    
+                    //3. Price from Market Order
+                    const orderPrice = data.price 
+                    
+                    //4. Calculate TP based on Entry Price
+                    const tp_price = (orderPrice * ((100 + parseFloat(tp))/100))
+                    
+                    //5. Fix Decimals
+                    const entryPrice = resolveDecimals(tp_price, symbol)
+
+                    //Create Trigger Market Order
+                    pushTriggerOrders(data,entryPrice,'S')
                     
                     //IF FIRST TRADE FAILS (MARKET ORDER)
                 }).catch(e => {
@@ -739,6 +864,7 @@ async function main(app) {
                             mainLog.print(`Trade:${alias}`,"M-B-TP0")
                             return createMarketOrder(symbol,input)
                         }
+
                     case 'S':
                         //Market Sell
                         if(tp !== '0%') {
@@ -750,6 +876,31 @@ async function main(app) {
                             mainLog.print(`Trade:${alias}`,"M-S-TP0")
                             return createMarketOrder(symbol,input)
                         }
+
+                    case 'BT':
+                        //Market Buy Trigger Order
+                        if(tp !== '0%' && p === '0%' || p === null) {
+                            //HAS TP? Create Market Order with Trigger TP
+                            mainLog.print(`Trade:${alias}`,"M-BT-TP")
+                            return createMarketTriggerOrderTP(symbol,input)
+                        } else if(p !== '0%' && tp === '0%' || tp === null) {
+                            //NO TP - Only create trigger price (basically a hidden limit buy order that market buys when price reaches > | <)
+                            mainLog.print(`Trade:${alias}`,"M-BT-TP0-P")
+                            return createMarketTriggerOrderP(symbol,input)
+                        }
+
+                    case 'ST':
+                        //Market Sell Trigger Order
+                        if(tp !== '0%' && p === '0%' || p === null) {
+                            //HAS TP? Create Market Order with Trigger TP
+                            mainLog.print(`Trade:${alias}`,"M-ST-TP")
+                            return createMarketTriggerOrderTP(symbol,input)
+                        } else if(p !== '0%' && tp === '0%' || tp === null) {
+                            //NO TP - Only create trigger price (basically a hidden limit sell order that market buys when price reaches > | <)
+                            mainLog.print(`Trade:${alias}`,"M-ST-TP0-P")
+                            return createMarketTriggerOrderP(symbol,input)
+                        }
+
                     case 'CB':
                         //Market Close Buys
                         //Always TP=NULL, P=NULL, Q=SUM(TAGS)
@@ -874,12 +1025,91 @@ async function main(app) {
         })
     }
 
+    async function processTriggerOrders(users) {
+        const instruments = stream.latest.instruments
+        const isTrigger = (currPrice, triggPrice, side) => {
+            if(side === 'S') {
+                return currPrice >= triggPrice
+            } else if (side === 'B') {
+                return currPrice <= triggPrice
+            } else {
+                console.log('Invalid Side isTrigger: ',side)
+                return false
+            }
+        }
+        const resolveSymbol = (symbol) => {            
+            switch(symbol) {
+                case 'XBTUSD':
+                    return 'BTC/USD'
+                case 'XRPUSD':
+                    return 'XRP/USD'
+                case 'ETHUSD':
+                    return 'ETH/USD'
+                case 'LTCUSD':
+                    return 'LTC/USD'
+                case 'BCHUSD':
+                    return 'BCH/USD'
+                default:
+                    return 'BTC/USD'
+            }
+        }
+        const process = () => Trigger_Orders.find({}).lean().then(d => {
+            d.forEach(order => {
+                const lastPrice = instruments[order.symbol].lastPrice
+                const isTriggerVal = isTrigger(lastPrice,order.price,order.side)
+                // console.log(`Processing _id '${order._id}' (db_id) with openTradeID '${order.openTradeID}' (for tp)`)
+                console.log(`Process _id '${order._id}' => ${order.symbol}:${order.side}:${order.price}`)
+                console.log(`Current price ${lastPrice} ${order.symbol} has triggered ${isTriggerVal}`)
+                console.log(isTriggerVal ? `Transmitting to CCXT! Removing from DB\n` : '\n')
+
+                if(isTriggerVal) {
+                    let trade = users[order.account]['ccxt']
+                    
+                    Trigger_Orders.deleteOne({ _id: order._id})
+                        .then(d=>console.log('Removed Trigger from TriggerOrders:',d))
+                        .catch(e => console.log(e))
+
+                    if(order.side === 'S') {
+                        trade.marketSellOrder(resolveSymbol(order.symbol),order.contracts).then(d => {
+                            console.log('CCXT - Bitmex Sell Order Complete: ', new Date)
+                            TO_Processed.create({...order})
+                                .then(d => console.log('Moved Trigger to Processed Collection: ',d))
+                                .catch(e => console.log(e))
+                        }).catch(e => {
+                            TO_Processed.create({...order, status: 'Failed'})
+                                .then(d => console.log('Moved Trigger to Processed Collection: ',d))
+                                .catch(e => console.log(e))
+                            console.log("Failed to create trade for TriggerOrder: ",e)
+                        })
+                    } else if (order.side === 'B') {
+                        trade.marketBuyOrder(resolveSymbol(order.symbol),order.contracts).then(d => {
+                            console.log('CCXT - Bitmex Buy Order Complete: ', new Date)
+                            TO_Processed.create({...order})
+                                .then(d => console.log('Moved Trigger to Processed Collection: ',d))
+                                .catch(e => console.log(e))
+                        }).catch(e => {
+                            TO_Processed.create({...order, status: 'Failed'})
+                                .then(d => console.log('Moved Trigger to Processed Collection: ',d))
+                                .catch(e => console.log(e))
+                            console.log("Failed to create trade for TriggerOrder: ",e)
+                        })
+                    }
+                }
+            })
+        }).catch(e => console.log('Failed to process trigger orders: ',e))
+
+        setInterval(process, 1000*15)
+    }
+
     //3. Create ccxt instances for all users
     //4. Start Main Program
     await initCCXTUsers()
         .then(() => {
             mainLog.print('Starting main app!')
             main(app)
+
+            mainLog.print('Starting Trigger Order Cycle!')
+            processTriggerOrders(users)
         })
         .catch(e => {
             readFileLog.print(`${color.pick.red}FATAL${color.pick.end}`,`Error initializeUsers: ${e}`)
