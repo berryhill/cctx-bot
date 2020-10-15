@@ -1202,6 +1202,40 @@ async function main(app) {
         }
     })
 
+    app.get('/api/latest/private/trigger/active/:account', async function (req,res) {
+        var account = req.params.account;
+        Trigger_Orders.find({account: account})
+            .lean()
+            .then(data => {
+                if(data) { 
+                    return res.status(200).json(data) 
+                } else {
+                    return res.status(404).json({message: 'No data for user'})
+                }
+            })
+            .catch(e => {
+                return res.status(500).json({ message: 'Server Error', error: e })
+            })
+        
+    })
+
+    app.get('/api/latest/private/trigger/complete/:account', async function (req,res) {
+        var account = req.params.account;
+        TO_Processed.find({account: account})
+            .lean()
+            .then(data => {
+                if(data) { 
+                    return res.status(200).json(data) 
+                } else {
+                    return res.status(404).json({message: 'No data for user'})
+                }
+            })
+            .catch(e => {
+                return res.status(500).json({ message: 'Server Error', error: e })
+            })
+        
+    })
+
     app.post('/register', async function(req,res) {
         const {email,username,password,apiKey,secretKey} = req.body
         User.create({
