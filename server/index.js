@@ -995,11 +995,7 @@ async function main(app) {
     //2. Start Stream
     await stream.init()
     await streamPrivate.startWebSocketMD()
-
-    await new Promise((resolve, reject) => {
-        console.log('Resolving in 5000 ms')
-        setTimeout(resolve(), 15000)
-    })
+    await streamPrivate.checkLoaded().then(console.log('checkLoaded: true'))
     
     async function initCCXTUsers() {
         return new Promise((resolve, reject) => {

@@ -28,13 +28,13 @@ const latest = {
 }
 
 async function startWebSocketMD() {
-    return new Promise(async (resolve,reject) => {
+    return await new Promise(async (resolve,reject) => {
         const wss = new WebSocket('wss://testnet.bitmex.com/realtimemd')
         
         log.print('Loading','Starting WSS realtime-mux-demux...')
 
         async function loadUsers() {
-            return new Promise((resolve,reject) => {
+            return await new Promise((resolve,reject) => {
                 User.find({}, (err,data) => {
                     if(err) {
                         reject(err)
@@ -116,10 +116,10 @@ async function startWebSocketMD() {
                         [topic]: p[3].request
                     })
                     
-                    if(latest.users.length === Object.keys(users).length) {
-                        latest.isLoaded = true
-                        resolve('Promise: success')
-                    }
+                    // if(latest.users.length === Object.keys(users).length) {
+                    //     latest.isLoaded = true
+                    //     resolve('Promise: success')
+                    // }
                     log.print('CHECKING',`Total Users in File: ${latest.users.length} Total in latest.users: ${Object.keys(users).length} isLoaded: ${latest.isLoaded}`)             
                 }
             } else if(action) {
@@ -132,6 +132,19 @@ async function startWebSocketMD() {
                 //Create Initial Data - One Time
                 log.print(`${color.pick.green}PARTIAL${color.pick.end}`,`${color.pick.red}${topic}${color.pick.end}: ${table}`)
                 latest[table][topic] = data
+
+                if( //execution, order, margin, position, wallet, 
+                    Object.keys(latest.execution).length === latest.users.length &&
+                    Object.keys(latest.order).length === latest.users.length &&
+                    Object.keys(latest.margin).length === latest.users.length &&
+                    Object.keys(latest.position).length === latest.users.length &&
+                    Object.keys(latest.wallet).length === latest.users.length
+                ) {
+                    latest.isLoaded = true
+                    resolve('Promise: success')
+                }
+
+
             } else if (action === 'update') {
                 data.forEach(obj => {
                     // latest.verbose ? log.print('UPDATE',`${topic}:${table} => ${Object.keys(obj).concat(' ')}`):''
@@ -171,11 +184,20 @@ async function startWebSocketMD() {
     })
 }
 
+function checkLoaded() {
+    return new Promise((resolve, reject) => {
+        if(latest.isLoaded) {
+            resolve()
+        }
+    })
+}
+
 // startWebSocketMD()
 
 module.exports = {
     startWebSocketMD,
-    latest
+    latest,
+    checkLoaded
 }
 
 
