@@ -14,6 +14,7 @@ const path = require('path');
 //Loggers and Color
 const color = require('./utils/colors')
 const Logger = require('./utils/logger');
+const { resolve } = require('path');
 const readFileLog = new Logger('Read User File',color.pick.bold)
 const mainLog = new Logger('Main Program',color.rgbFont(255,194,0))
 const expressLog = new Logger('Express',color.pick.magenta)
@@ -994,6 +995,11 @@ async function main(app) {
     //2. Start Stream
     await stream.init()
     await streamPrivate.startWebSocketMD()
+
+    await new Promise((resolve, reject) => {
+        console.log('Resolving in 5000 ms')
+        setTimeout(resolve(), 5000)
+    })
     
     async function initCCXTUsers() {
         return new Promise((resolve, reject) => {
