@@ -34,6 +34,7 @@ Supported Values for every key
 
 //Logging Variables
 const tradeVerbose = false
+const procOrdVerbose = false
 
 //Global Variables
 const users = {}
@@ -1011,10 +1012,21 @@ async function main(app) {
                             apiSecret: user.apiSecret,
                             ccxt: null
                         }
-                        users[user.username]['ccxt'] = new CreateCCXT(user.apiKey,user.apiSecret, user.username)
-                        await users[user.username]['ccxt'].init().then(()=> usersProcessed++).catch(e => reject(user.username,'Failed to load ccxt:',e))
-                        let isLoaded = usersProcessed === gotAPI.length
-                        ccxtLog.print('Initializing',`${usersProcessed} CCXT user(s) loaded and initialized... - isLoaded: ${isLoaded}`)
+
+                        const uBal = streamPrivate['latest']['margin'][user.username][0]['walletBalance'] / 100000000
+                        console.log('Wallet Balance in BTC: ',uBal)
+
+                        if(uBal > 0.25) {
+                            ccxtLog.print('BALANCE_OK',`${user.username} has total balance of ${uBal} adding to CCXT!`)
+                            users[user.username]['ccxt'] = new CreateCCXT(user.apiKey,user.apiSecret, user.username)
+                            await users[user.username]['ccxt'].init().then(()=> usersProcessed++).catch(e => reject(user.username,'Failed to load ccxt:',e))
+                            let isLoaded = usersProcessed === gotAPI.length
+                            ccxtLog.print('Initializing',`${usersProcessed} CCXT user(s) loaded and initialized... - isLoaded: ${isLoaded}`)
+
+                        } else {
+                            ccxtLog.print('BALANCE_LOW',`${user.username} has total balance of ${uBal} so skipping.`)
+                            usersProcessed++;
+                        }
 
                         if(usersProcessed===gotAPI.length) {
                             resolve('all ccxt initialized')
@@ -1058,9 +1070,9 @@ async function main(app) {
                 const lastPrice = instruments[order.symbol].lastPrice
                 const isTriggerVal = isTrigger(lastPrice,order.price,order.side)
                 // console.log(`Processing _id '${order._id}' (db_id) with openTradeID '${order.openTradeID}' (for tp)`)
-                console.log(`Process _id '${order._id}' => ${order.symbol}:${order.side}:${order.price}`)
-                console.log(`Current price ${lastPrice} ${order.symbol} has triggered ${isTriggerVal}`)
-                console.log(isTriggerVal ? `Transmitting to CCXT! Removing from DB\n` : '\n')
+                procOrdVerbose ? console.log(`Process _id '${order._id}' => ${order.symbol}:${order.side}:${order.price}`) : ''
+                procOrdVerbose ? console.log(`Current price ${lastPrice} ${order.symbol} has triggered ${isTriggerVal}`) : ''
+                procOrdVerbose ? console.log(isTriggerVal ? `Transmitting to CCXT! Removing from DB\n` : '\n') : ''
 
                 if(isTriggerVal) {
                     let trade = users[order.account]['ccxt']
