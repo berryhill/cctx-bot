@@ -998,7 +998,7 @@ async function main(app) {
 
     await new Promise((resolve, reject) => {
         console.log('Resolving in 5000 ms')
-        setTimeout(resolve(), 5000)
+        setTimeout(resolve(), 15000)
     })
     
     async function initCCXTUsers() {
