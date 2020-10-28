@@ -63,6 +63,11 @@ module.exports = function CreateCCXT(apiKey,apiSecret, name) {
         log.print('Trade', 'Sending limit Sell Order to Bitmex')    
         return this.bitmex.createLimitSellOrder (symbol, amount, price, params)
     },
+
+    this.cancelOrder = function(id) {
+        log.print('Trade', 'Sending Cancel Order to Bitmex')    
+        return this.bitmex.cancelOrder(id)
+    },
     
     this.balance = function() {
         log.print('Status', 'Getting user balance')    

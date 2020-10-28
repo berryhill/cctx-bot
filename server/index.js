@@ -14,7 +14,6 @@ const path = require('path');
 //Loggers and Color
 const color = require('./utils/colors')
 const Logger = require('./utils/logger');
-const { resolve } = require('path');
 const readFileLog = new Logger('Read User File',color.pick.bold)
 const mainLog = new Logger('Main Program',color.rgbFont(255,194,0))
 const expressLog = new Logger('Express',color.pick.magenta)
@@ -39,6 +38,7 @@ const procOrdVerbose = false
 
 //Global Variables
 const users = {}
+const inactiveList = []
 let tagTrades = []
 let tpOrders = []
 
@@ -336,6 +336,12 @@ async function main(app) {
                     return {code: 200, message:'Success to process Sell Market Order', input:input}
                 }).catch(e => {
                     //Send Server Error!
+                    inactiveList.push({
+                        'username': alias,
+                        'action': 'createMarketOrder[1]',
+                        'input': input,
+                        'error':e
+                    })
                     console.log("Failed to submit Market Sell Order: ",e)
                     return {code: 500, message:'Unable to process trade', input:input, e:e}
                 })
@@ -350,6 +356,12 @@ async function main(app) {
                     //IF TRADE FAILS (MARKET ORDER)
                 }).catch(e => {
                     //Send Server Error!
+                    inactiveList.push({
+                        'username': alias,
+                        'action': 'creatMarketOrder[1]',
+                        'input': input,
+                        'error':e
+                    })
                     console.log("Failed to submit Market Buy Order: ",e)
                     return {code: 500, message:'Unable to process trade', input:input, e:e}
                 })
@@ -385,6 +397,12 @@ async function main(app) {
                                 return {code: 200, message:'Success to Close Buy Orders', input:input}
                             })
                             .catch(e => {
+                                inactiveList.push({
+                                    'username': alias,
+                                    'action': 'creatMarketOrder[1]',
+                                    'input': input,
+                                    'error':e
+                                })
                                 console.log("[1] Failed to submit Market Order: ",e)
                                 return {code: 500, message:'Unable to close Buy Orders', input:input, e:e}
                             })
@@ -424,6 +442,12 @@ async function main(app) {
                                 return {code: 200, message:'Success to Close Sell Orders', input:input}
                             })
                             .catch(e => {
+                                inactiveList.push({
+                                    'username': alias,
+                                    'action': 'creatMarketOrder[1]',
+                                    'input': input,
+                                    'error':e
+                                })
                                 console.log("[1] Failed to submit Market Order: ",e)
                                 return {code: 500, message:'Unable to close Sell Orders', input:input, e:e}
                             })
@@ -433,6 +457,12 @@ async function main(app) {
                     tagIndex += 1
                 })
             } else {
+                inactiveList.push({
+                    'username': alias,
+                    'action': 'creatMarketOrder[1]',
+                    'input': input,
+                    'error':'unsupported command with order type'
+                })
                 return {code: 400, message:'Unsupported Command with Order Type', input:input}
             }
         }
@@ -483,14 +513,26 @@ async function main(app) {
                         //WHEN LIMIT ORDER FAILS
                     }).catch(e => {
                         //Send Server Error!
-                        console.log("[3] Failed to submit Appended Limit Order: ",e)
+                        inactiveList.push({
+                            'username': alias,
+                            'action': 'creatMarketTPOrder[2]',
+                            'input': input,
+                            'error':e
+                        })
+                        console.log("[2] Failed to submit Appended Limit Order: ",e)
                         return {code: 500, message:'Unable to process trade', input:input, e:e}
                     })
                     
                     //IF FIRST TRADE FAILS (MARKET ORDER)
                 }).catch(e => {
                     //Send Server Error!
-                    console.log("[2] Failed to submit Market Order: ",e)
+                    inactiveList.push({
+                        'username': alias,
+                        'action': 'creatMarketTPOrder[1]',
+                        'input': input,
+                        'error':e
+                    })
+                    console.log("[1] Failed to submit Market Order: ",e)
                     return {code: 500, message:'Unable to process trade', input:input, e:e}
                 })
 
@@ -525,18 +567,36 @@ async function main(app) {
 
                     }).catch(e => {
                         //Send Server Error!
-                        console.log("[3] Failed to submit Appended Limit Order: ",e)
+                        inactiveList.push({
+                            'username': alias,
+                            'action': 'creatMarketTPOrder[2]',
+                            'input': input,
+                            'error':e
+                        })
+                        console.log("[2] Failed to submit Appended Limit Order: ",e)
                         return {code: 500, message:'Unable to process trade', input:input, e:e}
                     })
                     
                     //IF FIRST TRADE FAILS (MARKET ORDER)
                 }).catch(e => {
                     //Send Server Error!
-                    console.log("[2] Failed to submit Market Order: ",e)
+                    inactiveList.push({
+                        'username': alias,
+                        'action': 'creatMarketTPOrder[1]',
+                        'input': input,
+                        'error':e
+                    })
+                    console.log("[1] Failed to submit Market Order: ",e)
                     return {code: 500, message:'Unable to process trade', input:input, e:e}
                 })
 
             } else {
+                inactiveList.push({
+                    'username': alias,
+                    'action': 'creatMarketTPOrder[1]',
+                    'input': input,
+                    'error':'unsupported command with order type'
+                })
                 return {code: 400, message:'Unsupported Command with Order Type', input:input}
             }
         }
@@ -616,7 +676,13 @@ async function main(app) {
                     //IF FIRST TRADE FAILS (MARKET ORDER)
                 }).catch(e => {
                     //Send Server Error!
-                    console.log("[2] Failed to submit Market Order: ",e)
+                    console.log("[1] Failed to submit Market Order: ",e)
+                    inactiveList.push({
+                        'username': alias,
+                        'action': 'creatMarketTriggerOrderTP[1]',
+                        'input': input,
+                        'error':e
+                    })
                     return {code: 500, message:'Unable to process trade', input:input, e:e}
                 })
 
@@ -644,11 +710,23 @@ async function main(app) {
                     //IF FIRST TRADE FAILS (MARKET ORDER)
                 }).catch(e => {
                     //Send Server Error!
-                    console.log("[2] Failed to submit Market Order: ",e)
+                    inactiveList.push({
+                        'username': alias,
+                        'action': 'creatMarketTriggerOrderTP[1]',
+                        'input': input,
+                        'error':e
+                    })
+                    console.log("[1] Failed to submit Market Order: ",e)
                     return {code: 500, message:'Unable to process trade', input:input, e:e}
                 })
 
             } else {
+                inactiveList.push({
+                    'username': alias,
+                    'action': 'creatMarketTriggerOrderTP[1]',
+                    'input': input,
+                    'error':'unsupported command with order type'
+                })
                 return {code: 400, message:'Unsupported Command with Order Type', input:input}
             }
         }
@@ -682,10 +760,15 @@ async function main(app) {
 
                 }).catch(e => {
                     //Send Server Error!
+                    inactiveList.push({
+                        'username': alias,
+                        'action': 'creatLimitOrder[1]',
+                        'input': input,
+                        'error':e
+                    })
                     console.log("[2] Failed to submit Limit Order: ",e)
                     return {code: 500, message:'Unable to process trade', input:input, e:e}
                 })
-
             } else if (command === 'B') {
                 //GET TICKER LAST PRICE
                 console.log("qntyXBT: ", qntyXBT)
@@ -705,11 +788,22 @@ async function main(app) {
 
                 }).catch(e => {
                     //Send Server Error!
-                    console.log("[2] Failed to submit Limit Order: ",e)
+                    inactiveList.push({
+                        'username': alias,
+                        'action': 'creatLimitOrder[1]',
+                        'input': input,
+                        'error':e
+                    })
+                    console.log("[1] Failed to submit Limit Order: ",e)
                     return {code: 500, message:'Unable to process trade', input:input, e:e}
                 })
-
             } else {
+                inactiveList.push({
+                    'username': alias,
+                    'action': 'creatLimitOrder[1]',
+                    'input': input,
+                    'error': 'unsupported command with order type'
+                })
                 return {code: 400, message:'Unsupported Command with Order Type', input:input}
             }
         }
@@ -766,12 +860,26 @@ async function main(app) {
                         //WHEN LIMIT ORDER FAILS
                     }).catch(e => {
                         //Send Server Error!
-                        console.log("[3] Failed to submit Appended Limit Order: ",e)
+                        inactiveList.push({
+                            'username': alias,
+                            'action': 'creatLimitTPOrder[2]',
+                            'input': input,
+                            'error':e
+                        })
+                        console.log("[2] Failed to submit Appended Limit Order: ",e)
                         return {code: 500, message:'Unable to process trade', input:input, e:e}
                     })
                     
                     //TICKER PRICE FETCH FAIL
-                }).catch(e => console.log("[1] Unable to fetch price to create order: ",e))
+                }).catch(e => {
+                    inactiveList.push({
+                        'username': alias,
+                        'action': 'creatLimitTPOrder[1]',
+                        'input': input,
+                        'error':e
+                    })
+                    console.log("[1] Unable to fetch price to create order: ",e)
+                })
 
             } else if (command === 'B') {
                 //GET TICKER LAST PRICE
@@ -813,18 +921,35 @@ async function main(app) {
                         //WHEN LIMIT ORDER FAILS
                     }).catch(e => {
                         //Send Server Error!
-                        console.log("[3] Failed to submit Appended Limit Order: ",e)
+                        inactiveList.push({
+                            'username': alias,
+                            'action': 'creatLimitTPOrder[2]',
+                            'input': input,
+                            'error':e
+                        })
+                        console.log("[2] Failed to submit Appended Limit Order: ",e)
                         return {code: 500, message:'Unable to process trade', input:input, e:e}
-                    })
-                    
+                    })  
                     //IF FIRST TRADE FAILS (MARKET ORDER)
                 }).catch(e => {
                     //Send Server Error!
-                    console.log("[2] Failed to submit Limit Order: ",e)
+                    inactiveList.push({
+                        'username': alias,
+                        'action': 'creatLimitTPOrder[1]',
+                        'input': input,
+                        'error':e
+                    })
+                    console.log("[1] Failed to submit Limit Order: ",e)
                     return {code: 500, message:'Unable to process trade', input:input, e:e}
                 })
 
             } else {
+                inactiveList.push({
+                    'username': alias,
+                    'action': 'creatLimitTPOrder[1]',
+                    'input': input,
+                    'error':'unsupported command with order type'
+                })
                 return {code: 400, message:'Unsupported Command with Order Type', input:input}
             }
         }
@@ -848,6 +973,13 @@ async function main(app) {
                 }
             }
         }
+
+        function clearTriggerTag(tag) {
+            Trigger_Orders.deleteMany({tag: tag}).lean().then(d=> {
+                console.log(`Deleted all pending Trigger Orders for tag ${tag}: `,d)
+            })
+        }
+
         //<---------------------END-----------------------> 
 
         //Call appropiate function based on post parameters, Market or Limit => Buy or Sell => With or Without TP.
@@ -882,7 +1014,6 @@ async function main(app) {
                     case 'BT':
                         //Market Buy Trigger Order
                         if(tp !== '0%' && p === '0%' || p === null) {
-                            //HAS TP? Create Market Order with Trigger TP
                             mainLog.print(`Trade:${alias}`,"M-BT-TP")
                             return createMarketTriggerOrderTP(symbol,input)
                         } else if(p !== '0%' && tp === '0%' || tp === null) {
@@ -952,6 +1083,44 @@ async function main(app) {
         }
     }
 
+    function clearLimitOrders(tag,alias) {
+        let ccxt = users[alias]['ccxt']
+
+        let tagIndex = 0
+        const tagOrders = tpOrders.filter((tagObj, index) => {
+            tagIndex = index
+            return tagObj.tag === tag
+        })
+        console.log('tpOrders',tpOrders)
+        if(tagOrders.length < 1) return console.log(tagOrders)
+        const tagBuysAlias = tagOrders[0].pendingTrades[0].filter(trade => trade.alias === alias)
+        const tagSellsAlias = tagOrders[0].pendingTrades[1].filter(trade => trade.alias === alias)
+
+        const tagBuyIds = tagBuysAlias.map(trade => trade.data.id)
+        const tagSellIds = tagSellsAlias.map(trade => trade.data.id)
+        const tagIds = [...tagBuyIds, ...tagSellIds]
+
+        console.log("BuysIds:",tagIds)
+
+        const orders = streamPrivate.latest.order[alias]
+        const limitOrdersUnfilled = orders.filter(o=>tagIds.includes(o.orderID))
+
+        // console.log('Limit Unfilled: ', limitOrdersUnfilled.length)
+        // console.log('Total Orders: ', orders.length)
+
+        limitOrdersUnfilled.forEach(trade => {
+            console.log('Canceling order with id: ',trade.orderID)
+            ccxt.cancelOrder(trade.orderID)
+            tpOrders[tagIndex]['pendingTrades'][0].map((d, index) => {
+                d.alias == alias ? tpOrders[tagIndex]['pendingTrades'][0].splice(index,1) : ''
+            })
+            tpOrders[tagIndex]['pendingTrades'][1].map((d, index) => {
+                d.alias == alias ? tpOrders[tagIndex]['pendingTrades'][0].splice(index,1) : ''
+            })
+        })
+    }
+
+
     //POST route for API calls
     app.post('/ccxt', async function (req, res) {
         const input = req.body;
@@ -984,6 +1153,11 @@ async function main(app) {
         }
     })
 
+    app.post('/api/private/cancel', async function (req,res) {
+        const {tag, alias} = req.body
+        clearLimitOrders(tag, alias)
+    })
+
 }
 
 //Start Application
@@ -1008,30 +1182,34 @@ async function main(app) {
                     reject(err)
                 } else {
                     gotAPI.forEach(async user => {
-                        users[user.username] = {
-                            name: user.username,
-                            apiKey: user.apiKey,
-                            apiSecret: user.apiSecret,
-                            ccxt: null
-                        }
+                        try {
+                            users[user.username] = {
+                                name: user.username,
+                                apiKey: user.apiKey,
+                                apiSecret: user.apiSecret,
+                                ccxt: null
+                            }
 
-                        const uBal = streamPrivate['latest']['margin'][user.username][0]['walletBalance'] / 100000000
-                        console.log('Wallet Balance in BTC: ',uBal)
+                            const uBal = streamPrivate['latest']['margin'][user.username][0]['walletBalance'] / 100000000
+                            console.log('Wallet Balance in BTC: ',uBal)
 
-                        if(uBal > 0.25) {
-                            ccxtLog.print('BALANCE_OK',`${user.username} has total balance of ${uBal} adding to CCXT!`)
-                            users[user.username]['ccxt'] = new CreateCCXT(user.apiKey,user.apiSecret, user.username)
-                            await users[user.username]['ccxt'].init().then(()=> usersProcessed++).catch(e => reject(user.username,'Failed to load ccxt:',e))
-                            let isLoaded = usersProcessed === gotAPI.length
-                            ccxtLog.print('Initializing',`${usersProcessed} CCXT user(s) loaded and initialized... - isLoaded: ${isLoaded}`)
+                            if(uBal > 0.25) {
+                                ccxtLog.print('BALANCE_OK',`${user.username} has total balance of ${uBal} adding to CCXT!`)
+                                users[user.username]['ccxt'] = new CreateCCXT(user.apiKey,user.apiSecret, user.username)
+                                await users[user.username]['ccxt'].init().then(()=> usersProcessed++).catch(e => reject(user.username,'Failed to load ccxt:',e))
+                                let isLoaded = usersProcessed === gotAPI.length
+                                ccxtLog.print('Initializing',`${usersProcessed} CCXT user(s) loaded and initialized... - isLoaded: ${isLoaded}`)
 
-                        } else {
-                            ccxtLog.print('BALANCE_LOW',`${user.username} has total balance of ${uBal} so skipping.`)
-                            usersProcessed++;
-                        }
+                            } else {
+                                ccxtLog.print('BALANCE_LOW',`${user.username} has total balance of ${uBal} so skipping.`)
+                                usersProcessed++;
+                            }
 
-                        if(usersProcessed===gotAPI.length) {
-                            resolve('all ccxt initialized')
+                            if(usersProcessed===gotAPI.length) {
+                                resolve('all ccxt initialized')
+                            }
+                        } catch(e) {
+                            console.log('initCCXT failed to go over gotAPI: ',e)
                         }
                     })
                 }
