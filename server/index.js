@@ -1191,7 +1191,7 @@ async function main(app) {
                             }
 
                             const uBal = streamPrivate['latest']['margin'][user.username][0]['walletBalance'] / 100000000
-                            console.log('Wallet Balance in BTC: ',uBal)
+                            console.log(`Wallet Balance in BTC ${user.username}: `,uBal)
 
                             if(uBal > 0.25) {
                                 ccxtLog.print('BALANCE_OK',`${user.username} has total balance of ${uBal} adding to CCXT!`)
