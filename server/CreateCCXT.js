@@ -26,7 +26,7 @@ module.exports = function CreateCCXT(apiKey,apiSecret, name) {
             }
 
             //Load Market Values from Bitmex
-            let response = await this.bitmex.loadMarkets()
+            let response = await this.bitmex.loadMarkets().catch(e => console.log('Failed to loadMarkets()'))
             if(response) {
                 resolve('success')
             } else {

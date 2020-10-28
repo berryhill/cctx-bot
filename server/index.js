@@ -1135,6 +1135,7 @@ async function main(app) {
                 for(const key of keys) {
                     let ccxt = users[key]['ccxt']
                     createTrade(input,key, ccxt).then(d => {
+                        console.log('CreateTrade')
                     })
                 }
                 sendJSON(res,200,'Success to process (all) orders',input)
@@ -1182,7 +1183,7 @@ async function main(app) {
                     reject(err)
                 } else {
                     gotAPI.forEach(async user => {
-                        try {
+                            let uBal = -1;
                             users[user.username] = {
                                 name: user.username,
                                 apiKey: user.apiKey,
@@ -1190,27 +1191,31 @@ async function main(app) {
                                 ccxt: null
                             }
 
-                            const uBal = streamPrivate['latest']['margin'][user.username][0]['walletBalance'] / 100000000
-                            console.log(`Wallet Balance in BTC ${user.username}: `,uBal)
+                            try {
+                                uBal = await streamPrivate['latest']['margin'][user.username][0]['walletBalance'] / 100000000
+                                console.log(`Wallet Balance in BTC ${user.username}: `,uBal)
 
-                            if(uBal > 0.25) {
-                                ccxtLog.print('BALANCE_OK',`${user.username} has total balance of ${uBal} adding to CCXT!`)
-                                users[user.username]['ccxt'] = new CreateCCXT(user.apiKey,user.apiSecret, user.username)
-                                await users[user.username]['ccxt'].init().then(()=> usersProcessed++).catch(e => reject(user.username,'Failed to load ccxt:',e))
-                                let isLoaded = usersProcessed === gotAPI.length
-                                ccxtLog.print('Initializing',`${usersProcessed} CCXT user(s) loaded and initialized... - isLoaded: ${isLoaded}`)
-
-                            } else {
-                                ccxtLog.print('BALANCE_LOW',`${user.username} has total balance of ${uBal} so skipping.`)
+                                if(uBal > 0.25) {
+                                    ccxtLog.print('BALANCE_OK',`${user.username} has total balance of ${uBal} adding to CCXT!`)
+                                    users[user.username]['ccxt'] = new CreateCCXT(user.apiKey,user.apiSecret, user.username)
+                                    await users[user.username]['ccxt'].init().then(()=> usersProcessed++).catch(e => reject(user.username,'Failed to load ccxt:',e))
+                                    let isLoaded = usersProcessed === gotAPI.length
+                                    ccxtLog.print('Initializing',`${usersProcessed} CCXT user(s) loaded and initialized... - isLoaded: ${isLoaded}`)
+    
+                                } else {
+                                    ccxtLog.print('BALANCE_LOW',`${user.username} has total balance of ${uBal} so skipping.`)
+                                    usersProcessed++;
+                                }
+                            } catch(e) {
+                                console.log(`initCCXT failed to go over gotAPI for user ${user.username}`,e)
                                 usersProcessed++;
+                                users.splice(users.findIndex(user.username),1)
+                                console.log('Removed user from users array to prevent ccxt errors!')
                             }
 
                             if(usersProcessed===gotAPI.length) {
                                 resolve('all ccxt initialized')
                             }
-                        } catch(e) {
-                            console.log('initCCXT failed to go over gotAPI: ',e)
-                        }
                     })
                 }
             }).lean()
