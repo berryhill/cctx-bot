@@ -1387,84 +1387,7 @@ async function main(app) {
         })
     }
 
-
-    //POST route for API calls
-    app.post('/ccxt', async function (req, res) {
-        console.log('\n🌐 ========== POST /ccxt RECEIVED ==========')
-        const input = req.body;
-        console.log('📨 Request Body:', JSON.stringify(input, null, 2))
-        
-        const errors = postSchema.validate(input)
-        console.log('✔️  Validation Errors:', errors.length === 0 ? 'None' : errors)
-
-        //VALIDATE INPUT
-        if(errors.length == 0) {
-            if(input.a === 'all') {
-                console.log('🔄 Processing for ALL users')
-                const keys = Object.keys(users)
-                console.log('👥 User count:', keys.length)
-                console.log('👥 Users:', keys)
-                
-                // Debug: Show full users object structure
-                console.log('\n🔍 DEBUG: Users object structure:')
-                keys.forEach(key => {
-                    console.log(`   ${key}:`, {
-                        name: users[key].name,
-                        hasApiKey: !!users[key].apiKey,
-                        hasApiSecret: !!users[key].apiSecret,
-                        hasCCXT: !!users[key].ccxt,
-                        ccxtType: users[key].ccxt ? typeof users[key].ccxt : 'null'
-                    })
-                })
-                
-                for(const key of keys) {
-                    console.log(`\n🔸 Processing user: ${key}`)
-                    let ccxt = users[key]['ccxt']
-                    console.log(`   CCXT available: ${ccxt ? 'Yes' : 'No'}`)
-                    if (!ccxt) {
-                        console.log(`   ⚠️  User object exists but CCXT is null`)
-                        console.log(`   ℹ️  This means CCXT initialization failed or balance was too low`)
-                        console.log(`   ℹ️  Check server startup logs for initialization errors`)
-                    }
-                    createTrade(input,key, ccxt).then(d => {
-                        console.log(`   ✅ CreateTrade completed for ${key}`)
-                    }).catch(e => {
-                        console.log(`   ❌ CreateTrade failed for ${key}:`, e)
-                    })
-                }
-                sendJSON(res,200,'Success to process (all) orders',input)
-
-            } else if(input.a !== 'all' && Object.keys(users).includes(input.a)) {
-                console.log(`🔸 Processing for single user: ${input.a}`)
-                let name = input.a
-                let ccxt = users[name]['ccxt']
-                console.log(`   CCXT available: ${ccxt ? 'Yes' : 'No'}`)
-                createTrade(input,name,ccxt).then(d => {
-                    console.log(`   ✅ CreateTrade completed for ${name}`)
-                    sendJSON(res,200,'Success to process (single) order',input)
-                }).catch(e => {
-                    console.log(`   ❌ CreateTrade failed for ${name}:`, e)
-                    sendJSON(res,500,'Failed to process order',input,e)
-                })
-            } else {
-                console.log(`⚠️  User '${input.a}' not found in users list`)
-                console.log('   Available users:', Object.keys(users))
-                sendJSON(res,404,'User not found',input)
-            }
-        } else {
-            //Validation contains errors
-            console.log('❌ Validation failed!')
-            validateLog.print('ERROR',`${errors}`)
-            sendJSON(res,400,'Unable to create trade',input,errors)
-        }
-        console.log('🌐 ========== POST /ccxt END ==========\n')
-    })
-
-    app.post('/api/private/cancel', async function (req,res) {
-        const {tag, alias} = req.body
-        clearLimitOrders(tag, alias)
-    })
-
+    // Routes moved outside main() function to be available even if CCXT init fails
 }
 
 //Start Application
@@ -1697,12 +1620,12 @@ async function main(app) {
     }
 
     //3. Create ccxt instances for all users
-    //4. Start Main Program
+    //4. Initialize main() to define trade functions, then init users
+    main(app)
+
     await initCCXTUsers()
         .then(() => {
-            mainLog.print('Starting main app!')
-            main(app)
-
+            mainLog.print('Starting main app - users initialized!')
             mainLog.print('Starting Trigger Order Cycle!')
             processTriggerOrders(users)
         })
@@ -1716,6 +1639,83 @@ async function main(app) {
     app.get('/', async function (req, res) {
         res.status(200).json({ status: 'ok', service: 'ccxt-bot' });
         expressLog.print('Request','/ health check')
+    })
+
+    //POST routes now registered - main() was called above to define createTrade function
+    app.post('/ccxt', async function (req, res) {
+        console.log('\n🌐 ========== POST /ccxt RECEIVED ==========')
+        const input = req.body;
+        console.log('📨 Request Body:', JSON.stringify(input, null, 2))
+
+        const errors = postSchema.validate(input)
+        console.log('✔️  Validation Errors:', errors.length === 0 ? 'None' : errors)
+
+        //VALIDATE INPUT
+        if(errors.length == 0) {
+            if(input.a === 'all') {
+                console.log('🔄 Processing for ALL users')
+                const keys = Object.keys(users)
+                console.log('👥 User count:', keys.length)
+                console.log('👥 Users:', keys)
+
+                // Debug: Show full users object structure
+                console.log('\n🔍 DEBUG: Users object structure:')
+                keys.forEach(key => {
+                    console.log(`   ${key}:`, {
+                        name: users[key].name,
+                        hasApiKey: !!users[key].apiKey,
+                        hasApiSecret: !!users[key].apiSecret,
+                        hasCCXT: !!users[key].ccxt,
+                        ccxtType: users[key].ccxt ? typeof users[key].ccxt : 'null'
+                    })
+                })
+
+                for(const key of keys) {
+                    console.log(`\n🔸 Processing user: ${key}`)
+                    let ccxt = users[key]['ccxt']
+                    console.log(`   CCXT available: ${ccxt ? 'Yes' : 'No'}`)
+                    if (!ccxt) {
+                        console.log(`   ⚠️  User object exists but CCXT is null`)
+                        console.log(`   ℹ️  This means CCXT initialization failed or balance was too low`)
+                        console.log(`   ℹ️  Check server startup logs for initialization errors`)
+                    }
+                    createTrade(input,key, ccxt).then(d => {
+                        console.log(`   ✅ CreateTrade completed for ${key}`)
+                    }).catch(e => {
+                        console.log(`   ❌ CreateTrade failed for ${key}:`, e)
+                    })
+                }
+                sendJSON(res,200,'Success to process (all) orders',input)
+
+            } else if(input.a !== 'all' && Object.keys(users).includes(input.a)) {
+                console.log(`🔸 Processing for single user: ${input.a}`)
+                let name = input.a
+                let ccxt = users[name]['ccxt']
+                console.log(`   CCXT available: ${ccxt ? 'Yes' : 'No'}`)
+                createTrade(input,name,ccxt).then(d => {
+                    console.log(`   ✅ CreateTrade completed for ${name}`)
+                    sendJSON(res,200,'Success to process (single) order',input)
+                }).catch(e => {
+                    console.log(`   ❌ CreateTrade failed for ${name}:`, e)
+                    sendJSON(res,500,'Failed to process order',input,e)
+                })
+            } else {
+                console.log(`⚠️  User '${input.a}' not found in users list`)
+                console.log('   Available users:', Object.keys(users))
+                sendJSON(res,404,'User not found',input)
+            }
+        } else {
+            //Validation contains errors
+            console.log('❌ Validation failed!')
+            validateLog.print('ERROR',`${errors}`)
+            sendJSON(res,400,'Unable to create trade',input,errors)
+        }
+        console.log('🌐 ========== POST /ccxt END ==========\n')
+    })
+
+    app.post('/api/private/cancel', async function (req,res) {
+        const {tag, alias} = req.body
+        clearLimitOrders(tag, alias)
     })
 
     app.get('/health', async function (_req, res) {
