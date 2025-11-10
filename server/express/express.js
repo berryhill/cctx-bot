@@ -22,8 +22,9 @@ const app = express();
 // app.use(cors(corsOptions)); //USE FOR PRODUCTION!
 app.use(cors());
 app.use(express.json());
+// Static file serving disabled for production deployment
+// The client is served separately in development/local environments
 // app.use(express.static(path.resolve("../build") + "/public"));
-app.use(express.static(__dirname + "./../build/public/"));
 
 module.exports = function Express() {
     this.init = () => new Promise((resolve,reject) => {
