@@ -16,14 +16,14 @@ const corsOptions = {
   }
 }
 
- //Setup Express and MiddleWare
- log.print('Loading','Setting up App and Middleware')
- const app = express();
-//  app.use(cors(corsOptions)); USE FOR PRODUCTION!
- app.use(cors());
- app.use(express.json());
-//  app.use(express.static(path.resolve("../build") + "/public"));
- app.use(express.static(__dirname + "./../build/public/"));
+//Setup Express and MiddleWare
+log.print('Loading','Setting up App and Middleware')
+const app = express();
+// app.use(cors(corsOptions)); //USE FOR PRODUCTION!
+app.use(cors());
+app.use(express.json());
+// app.use(express.static(path.resolve("../build") + "/public"));
+app.use(express.static(__dirname + "./../build/public/"));
 
 module.exports = function Express() {
     this.init = () => new Promise((resolve,reject) => {

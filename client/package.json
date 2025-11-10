@@ -13,8 +13,8 @@
     "react-scripts": "3.4.3"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build && rm -r ../server/build/public && mv ./build/ ../server/build/public",
+    "start": "NODE_OPTIONS=--openssl-legacy-provider react-scripts start",
+    "build": "NODE_OPTIONS=--openssl-legacy-provider react-scripts build && rm -r ../server/build/public && mv ./build/ ../server/build/public",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },

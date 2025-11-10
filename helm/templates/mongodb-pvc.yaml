@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.mongodb.name }}-data-pvc
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.mongodb.storage.dataSize }}
+  {{- if .Values.mongodb.storage.storageClass }}
+  storageClassName: {{ .Values.mongodb.storage.storageClass }}
+  {{- end }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.mongodb.name }}-config-pvc
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.mongodb.storage.configSize }}
+  {{- if .Values.mongodb.storage.storageClass }}
+  storageClassName: {{ .Values.mongodb.storage.storageClass }}
+  {{- end }}

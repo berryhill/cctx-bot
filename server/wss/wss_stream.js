@@ -6,7 +6,7 @@ const color = require('./../utils/colors')
 module.exports = function BitmexWS(verbose) {
     try {
         this.verbose = verbose
-        this.ws = new WebSocket('wss://testnet.bitmex.com/realtime');
+        this.ws = new WebSocket('wss://ws.testnet.bitmex.com/realtime');
         this.instrumentsSubscribe = ["XBTUSD","ETHUSD","XRPUSD","LTCUSD","BCHUSD"]
         this.latest = {
             startTime: new Date,

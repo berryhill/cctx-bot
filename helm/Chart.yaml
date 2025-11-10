@@ -1,0 +1,5 @@
+apiVersion: v2
+name: ccxt-bot
+description: A Helm chart for deploying CCXT Trading Bot
+version: 0.1.0
+appVersion: "1.0.0"

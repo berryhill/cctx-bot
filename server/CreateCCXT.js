@@ -12,18 +12,22 @@ module.exports = function CreateCCXT(apiKey,apiSecret, name) {
 
     this.init = function() {
         return new Promise((async (resolve,reject) => {
-            log.print('Loading', 'Creating new CCXT Instance')    
+            log.print('Loading', 'Creating new CCXT Instance')
+            log.print('Keys', `API Key: ${this.apiKey ? this.apiKey.substring(0, 8) + '...' : 'MISSING'}`)
+            log.print('Keys', `API Secret: ${this.apiSecret ? this.apiSecret.substring(0, 8) + '...' : 'MISSING'}`)
+            
             this.bitmex = new ccxt.bitmex ({
                 'apiKey': this.apiKey,
                 'secret': this.apiSecret,
                 'enableRateLimit': true
             })
 
-            //Enable Bitmex Testnet
-            if( Object.keys(this.bitmex.urls).includes('test') ) {
-                log.print('Config', 'Using Bitmex Testnet')    
-                this.bitmex.urls['api'] = this.bitmex.urls['test']
-            }
+            //Enable Bitmex Testnet (DISABLED - Using Mainnet)
+            // if( Object.keys(this.bitmex.urls).includes('test') ) {
+            //     log.print('Config', 'Using Bitmex Testnet')
+            //     this.bitmex.urls['api'] = this.bitmex.urls['test']
+            // }
+            log.print('Config', '🌐 Using Bitmex MAINNET')
 
             //Load Market Values from Bitmex
             let response = await this.bitmex.loadMarkets().catch(e => console.log('Failed to loadMarkets()'))
@@ -45,12 +49,16 @@ module.exports = function CreateCCXT(apiKey,apiSecret, name) {
     },
 
     this.marketSellOrder = function(symbol, amount, params) {
-        log.print('Trade', 'Sending Sell Order to Bitmex')    
+        log.print('Trade', 'Sending Sell Order to Bitmex')
+        log.print('Trade', `Symbol: ${symbol}, Amount: ${amount}, Params: ${JSON.stringify(params)}`)
+        log.print('Trade', `📤 Request Body: ${JSON.stringify({ symbol, amount, params }, null, 2)}`)
         return this.bitmex.createMarketSellOrder (symbol, amount, params)
     },
     
     this.marketBuyOrder = function(symbol, amount, params) {
-        log.print('Trade', 'Sending Buy Order to Bitmex')    
+        log.print('Trade', 'Sending Buy Order to Bitmex')
+        log.print('Trade', `Symbol: ${symbol}, Amount: ${amount}, Params: ${JSON.stringify(params)}`)
+        log.print('Trade', `📤 Request Body: ${JSON.stringify({ symbol, amount, params }, null, 2)}`)
         return this.bitmex.createMarketBuyOrder (symbol, amount, params)
     },
 
@@ -70,8 +78,14 @@ module.exports = function CreateCCXT(apiKey,apiSecret, name) {
     },
     
     this.balance = function() {
-        log.print('Status', 'Getting user balance')    
+        log.print('Status', 'Getting user balance')
         return this.bitmex.fetchBalance()
+    },
+    
+    this.positions = function() {
+        log.print('Status', 'Getting positions via private API')
+        // Use BitMEX private API endpoint directly
+        return this.bitmex.privateGetPosition()
     },
     
     this.closedOrders = function(symbol, since, limit, params) {
@@ -94,13 +108,3 @@ module.exports = function CreateCCXT(apiKey,apiSecret, name) {
         return this.bitmex.fetchTicker(symbol, params)
     }
 }
-
-
-
-
-
-
-
-
-
-

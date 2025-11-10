@@ -5,7 +5,7 @@ const postSchema = new Schema({
     "s": {
         type: String,
         required: true,
-        enum: ['XBTUSD','XRPUSD','ETHUSD','LTCUSD','BCHUSD'],
+        enum: ['XBTUSD','XRPUSD','ETHUSD','LTCUSD','BCHUSD', 'XBTUSDT', 'XRPUSDT', 'ETHUSDT', 'SOLUSDT', 'BMEXUSDT'],
         message: {
             type: 'Symbol must be a string.',
             required: 'Symbol is required.'
@@ -59,10 +59,9 @@ const postSchema = new Schema({
             }
     },
     "q": {
-        //>0.0025 XBT
+        //>0.0025 XBT or USDT amount - validation removed for flexibility
         type: String,
         required: true,
-        match: /^[0-9]{1,}XBT$|^[0-9]{1,5}\.[0-9]{1,4}XBT$|^auto$/,
         message: {
             type: 'Amount must be a string.',
             required: 'Amount is required.'

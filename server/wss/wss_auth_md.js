@@ -29,8 +29,6 @@ const latest = {
 
 async function startWebSocketMD() {
     return await new Promise(async (resolve,reject) => {
-        const wss = new WebSocket('wss://testnet.bitmex.com/realtimemd')
-        
         log.print('Loading','Starting WSS realtime-mux-demux...')
 
         async function loadUsers() {
@@ -47,13 +45,62 @@ async function startWebSocketMD() {
 
         log.print('FILTERING','Loading Users WSS-MD that have API keys...')
         const users = await loadUsers()
-                                .then(data => {
-                                    return data.filter(u => u.apiKey && u.apiSecret)
-                                }).catch(e => { 
-                                    log.print('Error','Failed add name(s) in user object!')
-                                    reject(d)
-                                })
-        log.print('FILTERING','All users with API keys in users variable now.')
+            .then(data => {
+                // Check for API keys in both top-level and nested api object
+                const filtered = data.filter(u => {
+                    const hasTopLevel = u.apiKey && u.apiSecret
+                    const hasNested = u.api && u.api.apiKey && u.api.apiSecret
+                    return hasTopLevel || hasNested
+                })
+                // Normalize the API keys to top level for easier access
+                return filtered.map(u => {
+                    if (!u.apiKey && u.api && u.api.apiKey) {
+                        u.apiKey = u.api.apiKey
+                        u.apiSecret = u.api.apiSecret
+                    }
+                    return u
+                })
+            }).catch(e => {
+                log.print('Error','Failed to load users from database!')
+                reject(e)
+            })
+        log.print('FILTERING',`Found ${users.length} user(s) with API keys in users variable now.`)
+
+        // If no users with API keys, skip WebSocket connection
+        if(users.length === 0) {
+            log.print('INFO','No users with API keys found. Skipping WebSocket MD connection.')
+            latest.isLoaded = true
+            return resolve('No users - WebSocket MD not needed')
+        }
+
+        // Only create WebSocket if there are users
+        log.print('CONNECTING','Attempting to connect to BitMEX MAINNET WebSocket...')
+        const wss = new WebSocket('wss://ws.bitmex.com/realtimemd')
+
+        // Track if we've already handled the error to prevent double rejection
+        let errorHandled = false
+
+        // Handle connection errors before the connection is established
+        wss.on('error', (error) => {
+            if (errorHandled) return // Prevent duplicate error handling
+            errorHandled = true
+
+            if (error.message && error.message.includes('Unexpected server response')) {
+                log.print('ERROR', `❌ BitMEX WebSocket connection failed: ${error.message}`)
+                log.print('ERROR', '💡 This usually means:')
+                log.print('ERROR', '   1. BitMEX testnet API endpoint has changed')
+                log.print('ERROR', '   2. Network connectivity issues')
+                log.print('ERROR', '   3. BitMEX testnet is temporarily unavailable')
+                log.print('ERROR', `   Current endpoint: wss://ws.testnet.bitmex.com/realtimemd`)
+                log.print('INFO', '⚙️  Server will continue running without BitMEX WebSocket connection')
+            } else {
+                log.print('ERROR', `❌ BitMEX WebSocket error: ${error.message || error}`)
+            }
+            
+            // Don't crash the server, just mark as not loaded and resolve with error message
+            latest.isLoaded = false
+            resolve('BitMEX WebSocket connection failed - server running without real-time data')
+        })
 
         
         // "affiliate",   // Affiliate status, such as total referred users & payout %
@@ -96,10 +143,16 @@ async function startWebSocketMD() {
             log.print('Initialzing','Authenticating every users private stream...')
             log.print('Initialzing','Subscribing users to channels...')
             // console.log('Users: ',users)
-            users.forEach(user => {
-                loginAndSubscribe(user,["execution", "order", "margin", "position", "wallet"])
-            })
-
+            if(users.length > 0) {
+                users.forEach(user => {
+                    loginAndSubscribe(user,["execution", "order", "margin", "position", "wallet"])
+                })
+            } else {
+                //Done
+                latest.isLoaded = true
+                resolve('Promise: success')
+            }
+            
         });
 
         wss.on('message', (d) => {
@@ -173,14 +226,18 @@ async function startWebSocketMD() {
             // log.print('MESSAGE',`latest: ${latest}`)
         })
 
-        wss.on('close', (d) => {
-            log.print('Terminating',`WS closing connection: ${d}`)
+        wss.on('close', (code, reason) => {
+            log.print('Terminating',`BitMEX WebSocket closing - Code: ${code}, Reason: ${reason || 'No reason provided'}`)
+            
+            // Common close codes
+            if (code === 1006) {
+                log.print('WARNING', '⚠️  Abnormal closure - connection lost without proper close frame')
+            } else if (code === 1000) {
+                log.print('INFO', '✅ Normal closure')
+            }
         });
 
-        wss.on('error', (e) => {
-            log.print('Error',`WebSocket sent received ws.on('error'): ${e}`)
-            reject(e)
-        })
+        // Note: The error handler is now defined earlier (before 'open') to catch connection errors
     })
 }
 
