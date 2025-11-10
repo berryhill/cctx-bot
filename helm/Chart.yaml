@@ -1,5 +1,13 @@
 apiVersion: v2
-name: ccxt-bot
-description: A Helm chart for deploying CCXT Trading Bot
-version: 0.1.0
+name: draftfly-app
+description: DraftFly App - Next.js web interface for blog generation
+type: application
+version: 1.0.0
 appVersion: "1.0.0"
+keywords:
+  - blog
+  - nextjs
+  - app
+  - web-ui
+maintainers:
+  - name: RDS Team

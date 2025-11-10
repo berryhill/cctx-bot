@@ -1,0 +1,103 @@
+# Default values for draftfly-app
+
+replicaCount: 1
+
+image:
+  repository: draftfly-app
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-http"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: draftfly.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: draftfly-app-tls
+      hosts:
+        - draftfly.example.com
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+livenessProbe:
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Doppler configuration (all env vars managed via Doppler)
+dopplerToken: ""
+environment: "prod"  # Options: workstation, dev, prod
+
+# API Configuration
+apiUrl: "http://draftfly-agent:80"  # Internal K8s service URL
+exportUrl: ""  # Export/publish endpoint URL
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - draftfly-app
+          topologyKey: kubernetes.io/hostname

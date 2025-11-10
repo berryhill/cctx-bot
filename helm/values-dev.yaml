@@ -1,36 +1,62 @@
-# Development environment values
+replicaCount: 1
 
-# Server configuration
-server:
-  name: ccxt-bot-server
-  replicaCount: 1  # Single replica for dev
-  environment: "development"
-  image:
-    repository: ccxt-bot-server  # Update with your registry
-    tag: "latest"
-    pullPolicy: IfNotPresent
-  service:
-    type: ClusterIP
-    port: 80
-    targetPort: 3000
-  doppler:
-    enabled: true  # Enable Doppler for development
-    token: ""  # Set via --set server.doppler.token or CI/CD
-  resources:
-    limits:
-      cpu: 500m
-      memory: 512Mi
-    requests:
-      cpu: 250m
-      memory: 256Mi
+image:
+  repository: ghcr.io/berryhill/ccxt-bot-server
+  pullPolicy: Always
+  tag: "0.0.1"
 
-# Ingress configuration
+imagePullSecrets:
+  - name: ghcr-secret
+
+# Doppler configuration
+dopplerToken: ""
+environment: "dev"
+
+# API Configuration
+apiUrl: "http://ccxt-bot-server:80"  # Internal K8s service URL
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
 ingress:
   enabled: true
-  name: ccxt-bot-ingress
   className: nginx
-  host: dev.ccxt-bot.example.com  # Update with your domain
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-http"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  hosts:
+    - host: dev.api.ccxt.berryhill.dev
+      paths:
+        - path: /
+          pathType: Prefix
+    - host: dev.api.ccxt.berryhill.dev
+      paths:
+        - path: /
+          pathType: Prefix
   tls:
-    enabled: true
-    clusterIssuer: "letsencrypt-prod"
-  annotations: {}
+    - secretName: ccxt-bot-server-tls
+      hosts:
+        - dev.api.ccxt.berryhill.dev
+
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+                - ccxt-bot-server
+        topologyKey: topology.kubernetes.io/zone

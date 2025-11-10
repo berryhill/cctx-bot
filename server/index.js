@@ -1,5 +1,4 @@
-// Bootstrap environment configuration
-require('./bootstrap');
+require('dotenv').config();
 
 const MongoDB = require('./database/MongoDB');
 const { User, Trigger_Orders, TO_Processed } = require('./database/MongoDB');
