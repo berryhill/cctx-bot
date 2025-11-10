@@ -28,6 +28,9 @@ server:
     type: ClusterIP
     port: 80
     targetPort: 3000
+  doppler:
+    enabled: true  # Enable Doppler for production
+    token: ""  # MUST be set via --set server.doppler.token or CI/CD secrets
   resources:
     limits:
       cpu: 1000m

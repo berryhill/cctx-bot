@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "ENV=workstation nodemon index.js",
+    "dev:doppler": "doppler run -- nodemon index.js",
+    "start:workstation": "ENV=workstation node index.js"
   },
   "keywords": [
     "cctx",
