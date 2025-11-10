@@ -52,6 +52,9 @@ const sendJSON = (res,statusCode, message, payload, error) => {
     })
 }
 
+// Module-level variables to hold trade functions
+let createTrade, clearLimitOrders
+
 //Define Main
 async function main(app) {
     //CREATING TRADES
@@ -66,7 +69,7 @@ async function main(app) {
         return 1 //+(1.25 ^ (accLevel-1))
     }
 
-    async function createTrade(input,alias,ccxt) {
+    createTrade = async function(input,alias,ccxt) {
         console.log('\n========== CREATE TRADE START ==========')
         console.log('📥 Input:', JSON.stringify(input, null, 2))
         console.log('👤 Alias:', alias)
@@ -1350,7 +1353,7 @@ async function main(app) {
         console.log('========== CREATE TRADE END ==========\n')
     }
 
-    function clearLimitOrders(tag,alias) {
+    clearLimitOrders = function(tag,alias) {
         let ccxt = users[alias]['ccxt']
 
         let tagIndex = 0
@@ -1386,8 +1389,6 @@ async function main(app) {
             })
         })
     }
-
-    // Routes moved outside main() function to be available even if CCXT init fails
 }
 
 //Start Application
@@ -1621,7 +1622,7 @@ async function main(app) {
 
     //3. Create ccxt instances for all users
     //4. Initialize main() to define trade functions, then init users
-    main(app)
+    await main(app)
 
     await initCCXTUsers()
         .then(() => {
