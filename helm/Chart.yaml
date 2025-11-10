@@ -6,9 +6,7 @@ version: 1.0.0
 appVersion: "1.0.0"
 keywords:
   - trading
-  - nextjs
-  - app
-  - web-ui
+  - ccxt
+  - bot
 maintainers:
   - name: RDS Team
-`
