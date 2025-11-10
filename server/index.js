@@ -457,9 +457,9 @@ async function main(app) {
             // Helper function to get lot size for a symbol
             function getLotSize(symbol) {
                 switch(symbol) {
-                    case 'BMEX/USDT': return 1000
-                    case 'XRP/USDT': return 100
-                    case 'XRP/USD': return 100
+                    case 'BMEX/USDT': return 1
+                    case 'XRP/USDT': return 1
+                    case 'XRP/USD': return 1
                     default: return 1
                 }
             }
