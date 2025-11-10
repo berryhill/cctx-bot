@@ -1998,7 +1998,7 @@ async function main(app) {
     })
     
     //Start the Express server on PORT (in production has to be forwarded to port 80 for TradingView to POST on Webhook!)
-    const listener = app.listen(3000 || process.env.PORT, function () {
+    const listener = app.listen(process.env.PORT || 3000, function () {
         console.log('Using port: '+process.env.PORT)
         expressLog.print(`${color.pick.green}LISTENING${color.pick.end}`,`Listening for calls on port:${listener.address().port}!`)
     })
