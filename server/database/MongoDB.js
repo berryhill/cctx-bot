@@ -46,7 +46,7 @@ module.exports = {
         useUnifiedTopology: true,
         useFindAndModify: false,
         useCreateIndex: true,
-        readPreference: 'primaryPreferred'
+        directConnection: true
     })
 }
 
