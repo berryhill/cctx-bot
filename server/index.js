@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const mongoose = require('mongoose');
 const MongoDB = require('./database/MongoDB');
 const { User, Trigger_Orders, TO_Processed } = require('./database/MongoDB');
 const postSchema = require('./validation/postSchema');
@@ -1731,8 +1732,26 @@ async function main(app) {
     })
 
     app.get('/health', async function (_req, res) {
-        res.status(200).json({ status: 'ok', service: 'ccxt-bot', timestamp: new Date().toISOString() });
-        expressLog.print('Request','/health check')
+        try {
+            // Ping MongoDB to check connection
+            await mongoose.connection.db.admin().ping();
+            res.status(200).json({
+                status: 'ok',
+                service: 'ccxt-bot',
+                timestamp: new Date().toISOString(),
+                mongodb: 'connected'
+            });
+            expressLog.print('Request','/health check - OK')
+        } catch (error) {
+            res.status(503).json({
+                status: 'error',
+                service: 'ccxt-bot',
+                timestamp: new Date().toISOString(),
+                mongodb: 'disconnected',
+                error: error.message
+            });
+            expressLog.print('Request','/health check - FAILED')
+        }
     })
 
     //API LINKS
