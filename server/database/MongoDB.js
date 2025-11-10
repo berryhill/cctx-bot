@@ -60,7 +60,8 @@ module.exports = {
         useUnifiedTopology: true,
         useFindAndModify: false,
         useCreateIndex: true,
-        readPreference: 'primary'
+        readPreference: 'primary',
+        replicaSet: 'rs0'
     })
 }
 

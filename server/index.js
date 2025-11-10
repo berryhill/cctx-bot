@@ -553,7 +553,7 @@ async function main(app) {
                     tag: tag,
                     account: input.a,
                     side: 'B'
-                })
+                }).read('primary')
 
                 if (buyTrades.length === 0) {
                     console.log(`❌ No buy trades found for tag "${tag}"`)
@@ -599,7 +599,7 @@ async function main(app) {
                     tag: tag,
                     account: input.a,
                     side: 'S'
-                })
+                }).read('primary')
 
                 if (sellTrades.length === 0) {
                     console.log(`❌ No sell trades found for tag "${tag}"`)
@@ -1484,7 +1484,7 @@ async function main(app) {
             let usersProcessed = 0;
 
             console.log('📊 Querying database for users...')
-            User.find({}, (err,dbUsers) => {
+            User.find({}).read('primary').exec((err,dbUsers) => {
                 console.log(`📋 Total users in database: ${dbUsers ? dbUsers.length : 0}`)
                 
                 if(err) {
@@ -1648,7 +1648,7 @@ async function main(app) {
                     return 'BTC/USD'
             }
         }
-        const process = () => Trigger_Orders.find({}).lean().then(d => {
+        const process = () => Trigger_Orders.find({}).read('primary').lean().then(d => {
             d.forEach(order => {
                 const lastPrice = instruments[order.symbol].lastPrice
                 const isTriggerVal = isTrigger(lastPrice,order.price,order.side)
@@ -1744,7 +1744,7 @@ async function main(app) {
     //API LINKS
     app.get('/api/tagTrades', async function (req,res) {
         try {
-            const trades = await Open_Trades.find({}).sort({ created: -1 })
+            const trades = await Open_Trades.find({}).read('primary').sort({ created: -1 })
 
             // Group by tag for backwards compatibility with old format
             const tagTradesFormat = []
@@ -1963,7 +1963,7 @@ async function main(app) {
 
     app.get('/api/latest/private/trigger/active/:account', async function (req,res) {
         var account = req.params.account;
-        Trigger_Orders.find({account: account})
+        Trigger_Orders.find({account: account}).read('primary')
             .lean()
             .then(data => {
                 if(data) { 
