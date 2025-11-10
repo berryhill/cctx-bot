@@ -13,7 +13,7 @@ env:
   DOCKER_TAG: 0.0.2
   GITHUB_USER: berryhill
   GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-  KUBECONFIG: ${{ secrets[format('{0}_KUBECONFIG', github.ref_name)] }}
+  LINODE_KUBECONFIG: ${{ secrets[format('{0}_LINODE_KUBECONFIG', github.ref_name)] }}
   DOPPLER_TOKEN: ${{ secrets[format('{0}_DOPPLER_TOKEN', github.ref_name)] }}
 
 jobs:
@@ -54,36 +54,24 @@ jobs:
     - name: Debug - Check secret availability
       run: |
         echo "Branch name: ${{ github.ref_name }}"
-        echo "Expected KUBECONFIG secret: ${{ github.ref_name }}_KUBECONFIG"
-        echo "Expected DOPPLER_TOKEN secret: ${{ github.ref_name }}_DOPPLER_TOKEN"
-
-        if [ -z "$KUBECONFIG" ]; then
-          echo "ERROR: KUBECONFIG is empty!"
-          echo "Please set the secret: ${{ github.ref_name }}_KUBECONFIG"
+        if [ -z "$LINODE_KUBECONFIG" ]; then
+          echo "ERROR: LINODE_KUBECONFIG is empty!"
+          echo "Expected secret name: LINODE_KUBECONFIG_${{ github.ref_name }}"
           exit 1
         else
-          echo "✓ KUBECONFIG is set (length: ${#KUBECONFIG})"
-        fi
-
-        if [ -z "$DOPPLER_TOKEN" ]; then
-          echo "ERROR: DOPPLER_TOKEN is empty!"
-          echo "Please set the secret: ${{ github.ref_name }}_DOPPLER_TOKEN"
-          exit 1
-        else
-          echo "✓ DOPPLER_TOKEN is set"
+          echo "✓ LINODE_KUBECONFIG is set (length: ${#LINODE_KUBECONFIG})"
         fi
       env:
-        KUBECONFIG: ${{ env.KUBECONFIG }}
-        DOPPLER_TOKEN: ${{ env.DOPPLER_TOKEN }}
+        LINODE_KUBECONFIG: ${{ env.LINODE_KUBECONFIG }}
 
     - name: Set up Kubeconfig
       run: |
         mkdir -p ~/.kube
-        echo "$KUBECONFIG" | base64 -d > ~/.kube/config
+        echo "$LINODE_KUBECONFIG" | base64 -d > ~/.kube/config
         chmod 600 ~/.kube/config
         echo "✓ Kubeconfig written and permissions set"
       env:
-        KUBECONFIG: ${{ env.KUBECONFIG }}
+        LINODE_KUBECONFIG: ${{ env.LINODE_KUBECONFIG }}
 
     - name: Verify Kubernetes connection
       run: |
