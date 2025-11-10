@@ -281,8 +281,18 @@ async function main(app) {
             console.log('\n📌 pushTagTrades() called')
             console.log('   Tag:', tag)
             console.log('   Data Side:', data.side)
+            console.log('   Data object keys:', Object.keys(data))
+            console.log('   Data:', JSON.stringify(data, null, 2))
+
             const side = data.side === 'sell' ? 'S' : 'B'
             console.log('   Resolved Side:', side)
+
+            // Extract order ID from various possible fields
+            const orderId = data.orderID || data.orderId || data.id || data.clOrdID || ''
+            const price = data.avgPx || data.price || data.lastPx || 0
+            const contracts = data.orderQty || data.contracts || data.cumQty || 0
+
+            console.log('   Extracted - orderId:', orderId, 'price:', price, 'contracts:', contracts)
 
             // Save trade to database
             const newTrade = new Open_Trades({
@@ -291,9 +301,9 @@ async function main(app) {
                 symbol: input.s,
                 side: side,
                 alias: alias,
-                orderId: data.orderID || data.orderId || '',
-                price: data.avgPx || data.price || 0,
-                contracts: data.orderQty || data.contracts || 0,
+                orderId: orderId || undefined, // Use undefined instead of empty string
+                price: price,
+                contracts: contracts,
                 opened: new Date()
             })
 
