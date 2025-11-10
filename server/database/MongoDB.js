@@ -45,7 +45,8 @@ module.exports = {
         useNewUrlParser: true,
         useUnifiedTopology: true,
         useFindAndModify: false,
-        useCreateIndex: true
+        useCreateIndex: true,
+        readPreference: 'primaryPreferred'
     })
 }
 
