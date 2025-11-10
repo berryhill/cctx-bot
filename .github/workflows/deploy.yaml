@@ -1,0 +1,117 @@
+name: Deploy CCXT Bot
+
+on:
+  push:
+    branches:
+      - 'dev'
+      - 'prod'
+
+env:
+  NAME: ccxt-bot
+  DOCKER_REGISTRY: ghcr.io
+  DOCKER_ORG: berryhill
+  DOCKER_TAG: ${{ github.sha }}
+  GITHUB_USER: berryhill
+  GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+  KUBECONFIG_SECRET: ${{ secrets[format('{0}_KUBECONFIG', github.ref_name)] }}
+  DOPPLER_TOKEN: ${{ secrets[format('{0}_DOPPLER_TOKEN', github.ref_name)] }}
+
+jobs:
+  build-push-server:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/prod'
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ env.GITHUB_USER }}
+        password: ${{ env.GHCR_TOKEN }}
+
+    - name: Build and push server Docker image
+      run: |
+        docker build \
+          -t ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_ORG }}/ccxt-bot-server:${{ env.DOCKER_TAG }} \
+          -t ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_ORG }}/ccxt-bot-server:latest \
+          -f server/Dockerfile \
+          ./server
+        docker push ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_ORG }}/ccxt-bot-server:${{ env.DOCKER_TAG }}
+        docker push ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_ORG }}/ccxt-bot-server:latest
+
+  deploy:
+    needs: [build-push-server]
+    runs-on: ubuntu-latest
+    if: always() && needs.build-push-server.result == 'success'
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Debug - Check secret availability
+      run: |
+        echo "Branch name: ${{ github.ref_name }}"
+        echo "Expected KUBECONFIG secret: ${{ github.ref_name }}_KUBECONFIG"
+        echo "Expected DOPPLER_TOKEN secret: ${{ github.ref_name }}_DOPPLER_TOKEN"
+
+        if [ -z "${{ env.KUBECONFIG_SECRET }}" ]; then
+          echo "ERROR: KUBECONFIG is empty!"
+          echo "Please set the secret: ${{ github.ref_name }}_KUBECONFIG"
+          exit 1
+        else
+          echo "✓ KUBECONFIG is set"
+        fi
+
+        if [ -z "${{ env.DOPPLER_TOKEN }}" ]; then
+          echo "ERROR: DOPPLER_TOKEN is empty!"
+          echo "Please set the secret: ${{ github.ref_name }}_DOPPLER_TOKEN"
+          exit 1
+        else
+          echo "✓ DOPPLER_TOKEN is set"
+        fi
+
+    - name: Set up Kubeconfig
+      run: |
+        mkdir -p ~/.kube
+        echo "${{ env.KUBECONFIG_SECRET }}" | base64 -d > ~/.kube/config
+        chmod 600 ~/.kube/config
+        echo "✓ Kubeconfig written and permissions set"
+
+    - name: Verify Kubernetes connection
+      run: |
+        echo "Testing kubectl connection..."
+        kubectl version --client
+        kubectl cluster-info
+        kubectl get nodes
+
+    - name: Set up Helm
+      uses: azure/setup-helm@v3
+
+    - name: Deploy server using Helm
+      run: |
+        helm upgrade --install ccxt-bot ./helm \
+          -f ./helm/values-${{ github.ref_name }}.yaml \
+          --namespace trading --create-namespace \
+          --set server.doppler.token="${{ env.DOPPLER_TOKEN }}" \
+          --set server.image.repository="${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_ORG }}/ccxt-bot-server" \
+          --set server.image.tag="${{ env.DOCKER_TAG }}" \
+          --set server.environment="${{ github.ref_name }}" \
+          --wait
+
+    - name: Wait for deployment to be ready
+      run: |
+        kubectl rollout status deployment/ccxt-bot-server -n trading --timeout=5m
+
+    - name: Get deployment status
+      run: |
+        echo "📊 Deployment Status:"
+        kubectl get all -n trading
+        echo ""
+        echo "🌐 Ingress URLs:"
+        kubectl get ingress -n trading -o custom-columns=NAME:.metadata.name,HOSTS:.spec.rules[*].host || echo "No ingress configured"
+        echo ""
+        echo "📦 Image deployed:"
+        echo "${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_ORG }}/ccxt-bot-server:${{ env.DOCKER_TAG }}"

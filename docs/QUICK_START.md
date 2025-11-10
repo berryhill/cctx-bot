@@ -199,8 +199,34 @@ helm upgrade --install ccxt-bot ./helm \
   --dry-run --debug
 ```
 
+## CI/CD with GitHub Actions
+
+### Automated Deployment
+
+Push to `dev` or `prod` branch to trigger automated deployment:
+
+```bash
+# Deploy to development
+git push origin dev
+
+# Deploy to production
+git push origin prod
+```
+
+### Required Secrets
+
+Configure in GitHub repository settings:
+- `GHCR_TOKEN` - GitHub Container Registry token
+- `dev_KUBECONFIG` - Development Kubernetes config (base64)
+- `prod_KUBECONFIG` - Production Kubernetes config (base64)
+- `dev_DOPPLER_TOKEN` - Development Doppler token
+- `prod_DOPPLER_TOKEN` - Production Doppler token
+
+See [GITHUB_ACTIONS_SETUP.md](GITHUB_ACTIONS_SETUP.md) for detailed CI/CD setup.
+
 ## Next Steps
 
 - Read [DOPPLER_INTEGRATION.md](DOPPLER_INTEGRATION.md) for detailed Doppler setup
-- Read [helm/README.md](helm/README.md) for Kubernetes deployment details
-- Read [CLAUDE.md](CLAUDE.md) for architecture and development guide
+- Read [GITHUB_ACTIONS_SETUP.md](GITHUB_ACTIONS_SETUP.md) for CI/CD configuration
+- Read [helm/README.md](../helm/README.md) for Kubernetes deployment details
+- Read [CLAUDE.md](../CLAUDE.md) for architecture and development guide
