@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "draftfly-app.fullname" . }}
+  name: {{ include "ccxt-bot.fullname" . }}
   labels:
-    {{- include "draftfly-app.labels" . | nindent 4 }}
+    {{- include "ccxt-bot.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "draftfly-app.selectorLabels" . | nindent 6 }}
+      {{- include "ccxt-bot.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
@@ -18,13 +18,13 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        {{- include "draftfly-app.selectorLabels" . | nindent 8 }}
+        {{- include "ccxt-bot.selectorLabels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "draftfly-app.serviceAccountName" . }}
+      serviceAccountName: {{ include "ccxt-bot.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:

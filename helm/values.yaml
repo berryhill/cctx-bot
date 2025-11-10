@@ -1,9 +1,9 @@
-# Default values for draftfly-app
+# Default values for ccxt-bot
 
 replicaCount: 1
 
 image:
-  repository: draftfly-app
+  repository: ccxt-bot
   pullPolicy: IfNotPresent
   tag: "latest"
 
@@ -40,7 +40,7 @@ ingress:
         - path: /
           pathType: Prefix
   tls:
-    - secretName: draftfly-app-tls
+    - secretName: ccxt-bot-tls
       hosts:
         - draftfly.example.com
 
@@ -99,5 +99,5 @@ affinity:
               - key: app.kubernetes.io/name
                 operator: In
                 values:
-                  - draftfly-app
+                  - ccxt-bot
           topologyKey: kubernetes.io/hostname

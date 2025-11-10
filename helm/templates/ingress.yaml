@@ -2,9 +2,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "draftfly-app.fullname" . }}
+  name: {{ include "ccxt-bot.fullname" . }}
   labels:
-    {{- include "draftfly-app.labels" . | nindent 4 }}
+    {{- include "ccxt-bot.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -33,7 +33,7 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ include "draftfly-app.fullname" $ }}
+                name: {{ include "ccxt-bot.fullname" $ }}
                 port:
                   number: {{ $.Values.service.port }}
           {{- end }}
