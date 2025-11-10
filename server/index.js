@@ -307,6 +307,7 @@ async function main(app) {
                 order_id: orderId || undefined, // Use undefined instead of empty string
                 price: price,
                 contracts: contracts,
+                metadata: input,
                 opened: new Date()
             })
 
