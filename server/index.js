@@ -308,11 +308,22 @@ async function main(app) {
             })
 
             try {
+                // Check mongoose connection state before saving
+                if (mongoose.connection.readyState !== 1) {
+                    console.log(`⚠️  Mongoose connection state: ${mongoose.connection.readyState} (0=disconnected, 1=connected, 2=connecting, 3=disconnecting)`)
+                }
+
                 await newTrade.save()
                 console.log('✅ Trade saved to database')
                 tradeVerbose ? console.log("   Trade:", JSON.stringify(newTrade,null,1) ) : ''
             } catch (error) {
-                console.error('❌ Error saving trade to database:', error)
+                console.error('❌ Error saving trade to database:')
+                console.error('   Error name:', error.name)
+                console.error('   Error message:', error.message)
+                console.error('   Mongoose state:', mongoose.connection.readyState)
+                if (error.reason) {
+                    console.error('   Reason:', error.reason)
+                }
             }
         }
 
