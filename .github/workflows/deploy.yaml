@@ -57,28 +57,33 @@ jobs:
         echo "Expected KUBECONFIG secret: ${{ github.ref_name }}_KUBECONFIG"
         echo "Expected DOPPLER_TOKEN secret: ${{ github.ref_name }}_DOPPLER_TOKEN"
 
-        if [ -z "${{ env.KUBECONFIG }}" ]; then
+        if [ -z "$KUBECONFIG" ]; then
           echo "ERROR: KUBECONFIG is empty!"
           echo "Please set the secret: ${{ github.ref_name }}_KUBECONFIG"
           exit 1
         else
-          echo "✓ KUBECONFIG is set"
+          echo "✓ KUBECONFIG is set (length: ${#KUBECONFIG})"
         fi
 
-        if [ -z "${{ env.DOPPLER_TOKEN }}" ]; then
+        if [ -z "$DOPPLER_TOKEN" ]; then
           echo "ERROR: DOPPLER_TOKEN is empty!"
           echo "Please set the secret: ${{ github.ref_name }}_DOPPLER_TOKEN"
           exit 1
         else
           echo "✓ DOPPLER_TOKEN is set"
         fi
+      env:
+        KUBECONFIG: ${{ env.KUBECONFIG }}
+        DOPPLER_TOKEN: ${{ env.DOPPLER_TOKEN }}
 
     - name: Set up Kubeconfig
       run: |
         mkdir -p ~/.kube
-        echo "${{ env.KUBECONFIG }}" | base64 -d > ~/.kube/config
+        echo "$KUBECONFIG" | base64 -d > ~/.kube/config
         chmod 600 ~/.kube/config
         echo "✓ Kubeconfig written and permissions set"
+      env:
+        KUBECONFIG: ${{ env.KUBECONFIG }}
 
     - name: Verify Kubernetes connection
       run: |
