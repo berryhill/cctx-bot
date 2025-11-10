@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const mongoose = require('mongoose');
 const MongoDB = require('./database/MongoDB');
-const { User, Trigger_Orders, TO_Processed } = require('./database/MongoDB');
+const { User, Trigger_Orders, TO_Processed, Open_Trades } = require('./database/MongoDB');
 const postSchema = require('./validation/postSchema');
 const CreateCCXT = require('./CreateCCXT');
 const BitmexStream = require('./wss/wss_stream');
@@ -39,7 +39,7 @@ const procOrdVerbose = false
 //Global Variables
 const users = {}
 const inactiveList = []
-let tagTrades = []
+// tagTrades migrated to MongoDB Open_Trades collection
 let tpOrders = []
 
 //Return JSON-response from server (Mainly to Tradingview which POSTS to the Webhook.)
@@ -277,62 +277,33 @@ async function main(app) {
         }
 
         //Function to insert trades with specific tag & side
-        function pushTagTrades(tag, data, input) {
+        async function pushTagTrades(tag, data, input) {
             console.log('\n📌 pushTagTrades() called')
             console.log('   Tag:', tag)
             console.log('   Data Side:', data.side)
             const side = data.side === 'sell' ? 'S' : 'B'
             console.log('   Resolved Side:', side)
-            const tagObj = {
+
+            // Save trade to database
+            const newTrade = new Open_Trades({
                 tag: tag,
-                openTrades: [[],[]]
-            }
-
-            const tradeObj = {
-                alias: alias,
+                account: input.a,
+                symbol: input.s,
                 side: side,
-                type: 'Market',
-                data: data,
-                input: input
+                alias: alias,
+                orderId: data.orderID || data.orderId || '',
+                price: data.avgPx || data.price || 0,
+                contracts: data.orderQty || data.contracts || 0,
+                opened: new Date()
+            })
+
+            try {
+                await newTrade.save()
+                console.log('✅ Trade saved to database')
+                tradeVerbose ? console.log("   Trade:", JSON.stringify(newTrade,null,1) ) : ''
+            } catch (error) {
+                console.error('❌ Error saving trade to database:', error)
             }
-            
-            const isTag = (obj) => obj.tag === tag
-            const indexTag = tagTrades.findIndex(isTag)
-
-            //Empty tagTrades Array
-            if(indexTag === -1) {
-
-                //Directly put in object!
-                if(side === 'B') {
-                    tagObj.openTrades[0].push(tradeObj)
-                    tagTrades.push(tagObj)
-                } else if (side === 'S') {
-                    tagObj.openTrades[1].push(tradeObj)
-                    tagTrades.push(tagObj)
-                } else {
-                    console.log("pushTagTrades unknown side: ",side)
-                }
-
-                tradeVerbose ? console.log("tagTrades (after pushTrades): ", JSON.stringify(tagTrades,null,1) ) : ''
-                return
-
-            } else {
-                //Go over all tagObjects and look for matching tag in object, then push into the existing array
-                    // console.log("tag in tagTrades at index: ",indexTag)
-                    //LONG[0] OR SHORT[1] ARRAY 
-                    if(side === 'B') {
-                        tagTrades[indexTag]["openTrades"][0].push(tradeObj)
-                    } else if (side === 'S') {
-                        tagTrades[indexTag]["openTrades"][1].push(tradeObj)
-                    } else {
-                        console.log("pushTagTrades unknown side: ",side)
-                    }
-                    
-                    tradeVerbose ? console.log("tagTrades (after pushTrades): ", JSON.stringify(tagTrades,null,1) ) : ''
-                    return
-
-            }
-            
         }
 
         //Function to insert pending limit trades with specific tag & side
@@ -556,105 +527,97 @@ async function main(app) {
                 })
 
             } else if (command === 'CB') {
-                let tagIndex = 0
-                //TAG OBJECT IN ARRAY { tag: 'TAG', openTrades: [[{},{},{}], [{},{},{}]]}
-                tagTrades.forEach((obj) => {
-
-                    //+++++++WHAT IF NOT FOUND??
-                    if(obj['tag'] === tag) {
-                        //Found our tag, now need to iterate over every trade of side (S) or (B) and add the USD value together
-                        const buyTrades = obj.data[0]
-                        let totalOpenBuyValueUSD = 0
-                        let totalToClose = 0
-
-                        //Accumulate USD Value and # of Trades
-                        for(const trade in buyTrades) {
-                            totalOpenBuyValueUSD += parseFloat(trade.valueUSD)
-                            totalToClose += 1
-                        }
-
-                        //REMOVE tag from tagTrades!!!! No multiple closings with same trades
-                        console.log("tagTrades[tagIndex]: ", tagTrades[tagIndex], " tagIndex: ", tagIndex)
-                        tagTrades.splice(tagIndex,1)
-                        console.log("Removed Tag Array at Index: ", tagIndex)
-
-                        //WE CLOSE BUY ORDERES WITH MARKET SELL ORDERS (OPPOSITE DIRECTION)
-                        trade.marketSellOrder(symbol,totalOpenBuyValueUSD)
-                            .then(function(data) {
-                                console.log('CCXT - Bitmex Close Buy Order Complete: ', new Date)
-                                pushTagTrades(orderTag,data,input)
-                                return {code: 200, message:'Success to Close Buy Orders', input:input}
-                            })
-                            .catch(e => {
-                                inactiveList.push({
-                                    'username': alias,
-                                    'action': 'creatMarketOrder[1]',
-                                    'input': input,
-                                    'error':e
-                                })
-                                console.log("[1] Failed to submit Market Order: ",e)
-                                return {code: 500, message:'Unable to close Buy Orders', input:input, e:e}
-                            })
-                        //Finish
-                        return
-                    }
-                    tagIndex += 1
+                // Find all buy trades for this tag from database
+                const buyTrades = await Open_Trades.find({
+                    tag: tag,
+                    account: input.a,
+                    side: 'B'
                 })
+
+                if (buyTrades.length === 0) {
+                    console.log(`❌ No buy trades found for tag "${tag}"`)
+                    return {code: 404, message:'No buy trades found to close', input:input}
+                }
+
+                // Calculate total contracts to close
+                let totalContracts = 0
+                buyTrades.forEach(trade => {
+                    totalContracts += trade.contracts
+                })
+
+                console.log(`📊 Closing ${buyTrades.length} buy trade(s), total contracts: ${totalContracts}`)
+
+                // Delete from database BEFORE placing order
+                await Open_Trades.deleteMany({
+                    tag: tag,
+                    account: input.a,
+                    side: 'B'
+                })
+                console.log(`✅ Removed ${buyTrades.length} buy trades from database`)
+
+                // WE CLOSE BUY ORDERS WITH MARKET SELL ORDERS (OPPOSITE DIRECTION)
+                trade.marketSellOrder(symbol, totalContracts)
+                    .then(async function(data) {
+                        console.log('CCXT - Bitmex Close Buy Order Complete: ', new Date)
+                        await pushTagTrades(orderTag, data, input)
+                        return {code: 200, message:'Success to Close Buy Orders', input:input}
+                    })
+                    .catch(e => {
+                        inactiveList.push({
+                            'username': alias,
+                            'action': 'creatMarketOrder[1]',
+                            'input': input,
+                            'error':e
+                        })
+                        console.log("[1] Failed to submit Market Order: ",e)
+                        return {code: 500, message:'Unable to close Buy Orders', input:input, e:e}
+                    })
             } else if (command === 'CS') {
-                let tagIndex = 0
-                //TAG OBJECT IN ARRAY { tag: 'TAG', openTrades: [[{},{},{}], [{},{},{}]]}
-                tagTrades.forEach((obj) => {
-
-                    //+++++++WHAT IF NOT FOUND??
-                    if(obj['tag'] === tag) {
-                        console.log(`   ✅ Found tag "${tag}" in tagTrades`)
-                        console.log(`   🔍 Tag object structure:`, Object.keys(obj))
-                        
-                        // Check if obj.data exists and has the expected structure
-                        if (!obj.data || !obj.data[1]) {
-                            console.log(`   ❌ ERROR: Tag object doesn't have expected data structure`)
-                            console.log(`   📊 Tag object:`, JSON.stringify(obj, null, 2))
-                            return
-                        }
-                        
-                        //Found our tag, now need to iterate over every trade of side (S) or (B) and add the USD value together
-                        const sellTrades = obj.data[1]
-                        let totalOpenSellValueUSD = 0
-                        let totalToClose = 0
-
-                        //Accumulate USD Value and # of Trades
-                        for(const trade in sellTrades) {
-                            totalOpenSellValueUSD += parseFloat(trade.valueUSD)
-                            totalToClose += 1
-                        }
-
-                        //REMOVE tag from tagTrades!!!! No multiple closings with same trades
-                        console.log("tagTrades[tagIndex]: ", tagTrades[tagIndex], " tagIndex: ", tagIndex)
-                        tagTrades.splice(tagIndex,1)
-                        console.log("Removed Tag Array at Index: ", tagIndex)
-
-                        //WE CLOSE SELL ORDERES WITH MARKET BUY ORDERS (OPPOSITE DIRECTION)
-                        trade.marketBuyOrder(symbol,totalOpenSellValueUSD)
-                            .then(function(data) {
-                                console.log('CCXT - Bitmex Close Sell Order Complete: ', new Date)
-                                pushTagTrades(orderTag,data,input)
-                                return {code: 200, message:'Success to Close Sell Orders', input:input}
-                            })
-                            .catch(e => {
-                                inactiveList.push({
-                                    'username': alias,
-                                    'action': 'creatMarketOrder[1]',
-                                    'input': input,
-                                    'error':e
-                                })
-                                console.log("[1] Failed to submit Market Order: ",e)
-                                return {code: 500, message:'Unable to close Sell Orders', input:input, e:e}
-                            })
-                        //Finish
-                        return
-                    }
-                    tagIndex += 1
+                // Find all sell trades for this tag from database
+                const sellTrades = await Open_Trades.find({
+                    tag: tag,
+                    account: input.a,
+                    side: 'S'
                 })
+
+                if (sellTrades.length === 0) {
+                    console.log(`❌ No sell trades found for tag "${tag}"`)
+                    return {code: 404, message:'No sell trades found to close', input:input}
+                }
+
+                // Calculate total contracts to close
+                let totalContracts = 0
+                sellTrades.forEach(trade => {
+                    totalContracts += trade.contracts
+                })
+
+                console.log(`📊 Closing ${sellTrades.length} sell trade(s), total contracts: ${totalContracts}`)
+
+                // Delete from database BEFORE placing order
+                await Open_Trades.deleteMany({
+                    tag: tag,
+                    account: input.a,
+                    side: 'S'
+                })
+                console.log(`✅ Removed ${sellTrades.length} sell trades from database`)
+
+                // WE CLOSE SELL ORDERS WITH MARKET BUY ORDERS (OPPOSITE DIRECTION)
+                trade.marketBuyOrder(symbol, totalContracts)
+                    .then(async function(data) {
+                        console.log('CCXT - Bitmex Close Sell Order Complete: ', new Date)
+                        await pushTagTrades(orderTag, data, input)
+                        return {code: 200, message:'Success to Close Sell Orders', input:input}
+                    })
+                    .catch(e => {
+                        inactiveList.push({
+                            'username': alias,
+                            'action': 'creatMarketOrder[1]',
+                            'input': input,
+                            'error':e
+                        })
+                        console.log("[1] Failed to submit Market Order: ",e)
+                        return {code: 500, message:'Unable to close Sell Orders', input:input, e:e}
+                    })
             } else {
                 inactiveList.push({
                     'username': alias,
@@ -1223,22 +1186,25 @@ async function main(app) {
         }
 
         //Function to close trades on a certain tag & side
-        function closeTagTrades(tag, data) {
-            const side = data.side === 'sell' ? 'S' : 'B'
-            for (const obj in tagTrades) {
-                //IF TAG FOUND IN tagTrades
-                if (obj[tag] === selectedTag) {
-                    if(side === 'B') {
-                        obj.openTrades[0] = []
-                    } else if (side === 'S') {
-                        obj.openTrades[1] = []
-                    } else {
-                        console.log("Unknown side to close: ",side)
-                    }
+        async function closeTagTrades(tag, side) {
+            const sideCode = side === 'sell' ? 'S' : 'B'
+
+            try {
+                const result = await Open_Trades.deleteMany({
+                    tag: tag,
+                    side: sideCode
+                })
+
+                if (result.deletedCount > 0) {
+                    console.log(`✅ Closed ${result.deletedCount} ${sideCode === 'B' ? 'buy' : 'sell'} trades for tag: ${tag}`)
                 } else {
-                    //tagTrades does not contain any trades to drop with tag
-                    console.log('No trades found to close for tag: ',tag)
+                    console.log('No trades found to close for tag: ', tag)
                 }
+
+                return result.deletedCount
+            } catch (error) {
+                console.error('Error closing trades:', error)
+                return 0
             }
         }
 
@@ -1756,7 +1722,48 @@ async function main(app) {
 
     //API LINKS
     app.get('/api/tagTrades', async function (req,res) {
-        return res.json(tagTrades)
+        try {
+            const trades = await Open_Trades.find({}).sort({ created: -1 })
+
+            // Group by tag for backwards compatibility with old format
+            const tagTradesFormat = []
+            const tagGroups = {}
+
+            trades.forEach(trade => {
+                if (!tagGroups[trade.tag]) {
+                    tagGroups[trade.tag] = {
+                        tag: trade.tag,
+                        openTrades: [[], []] // [longs, shorts]
+                    }
+                }
+
+                const tradeObj = {
+                    alias: trade.alias,
+                    symbol: trade.symbol,
+                    orderId: trade.orderId,
+                    price: trade.price,
+                    contracts: trade.contracts,
+                    opened: trade.opened
+                }
+
+                // Add to longs [0] or shorts [1]
+                if (trade.side === 'B') {
+                    tagGroups[trade.tag].openTrades[0].push(tradeObj)
+                } else {
+                    tagGroups[trade.tag].openTrades[1].push(tradeObj)
+                }
+            })
+
+            // Convert to array format
+            Object.values(tagGroups).forEach(group => {
+                tagTradesFormat.push(group)
+            })
+
+            return res.json(tagTradesFormat)
+        } catch (error) {
+            console.error('Error fetching tagTrades:', error)
+            return res.status(500).json({ error: 'Failed to fetch trades' })
+        }
     })
 
     app.get('/api/tpOrders', async function (req,res) {

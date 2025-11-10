@@ -37,10 +37,24 @@ const tOrdersProcessedSchema = new Schema({
     created: { type: Date, required: true}
 })
 
+const openTradesSchema = new Schema({
+    tag: { type: String, required: true, index: true },
+    account: { type: String, required: true, index: true },
+    symbol: { type: String, required: true },
+    side: { type: String, match:/^B$|^S$/, required: true },
+    alias: { type: String, required: true },
+    orderId: { type: String, required: true },
+    price: { type: Number, required: true },
+    contracts: { type: Number, required: true },
+    opened: { type: Date, default: Date.now },
+    created: { type: Date, default: Date.now }
+})
+
 module.exports = {
     User: mongoose.model('User', userSchema),
     Trigger_Orders: mongoose.model('Trigger_Orders', triggerOrdersSchema),
     TO_Processed: mongoose.model('TO_Processed', tOrdersProcessedSchema),
+    Open_Trades: mongoose.model('Open_Trades', openTradesSchema),
     database: mongoose.connect(process.env.DB_URL, {
         useNewUrlParser: true,
         useUnifiedTopology: true,
