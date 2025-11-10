@@ -1730,6 +1730,11 @@ async function main(app) {
         expressLog.print('Request','/ health check')
     })
 
+    app.get('/health', async function (_req, res) {
+        res.status(200).json({ status: 'ok', service: 'ccxt-bot', timestamp: new Date().toISOString() });
+        expressLog.print('Request','/health check')
+    })
+
     //API LINKS
     app.get('/api/tagTrades', async function (req,res) {
         return res.json(tagTrades)
