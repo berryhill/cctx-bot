@@ -304,7 +304,7 @@ async function main(app) {
                 symbol: input.s,
                 side: side,
                 alias: alias,
-                orderId: orderId || undefined, // Use undefined instead of empty string
+                order_id: orderId || undefined, // Use undefined instead of empty string
                 price: price,
                 contracts: contracts,
                 opened: new Date()
@@ -1762,7 +1762,7 @@ async function main(app) {
                 const tradeObj = {
                     alias: trade.alias,
                     symbol: trade.symbol,
-                    orderId: trade.orderId,
+                    orderId: trade.order_id,
                     price: trade.price,
                     contracts: trade.contracts,
                     opened: trade.opened

@@ -43,7 +43,7 @@ const openTradesSchema = new Schema({
     symbol: { type: String, required: true },
     side: { type: String, match:/^B$|^S$/, required: true },
     alias: { type: String, required: true },
-    orderId: { type: String, required: false },
+    order_id: { type: String, required: false },
     price: { type: Number, required: true },
     contracts: { type: Number, required: true },
     opened: { type: Date, default: Date.now },
