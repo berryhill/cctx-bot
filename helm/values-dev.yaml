@@ -1,20 +1,5 @@
 # Development environment values
 
-# MongoDB configuration
-mongodb:
-  name: ccxt-bot-mongodb
-  image:
-    repository: mongo
-    tag: "5.0"
-    pullPolicy: IfNotPresent
-  database: ccxt-bot
-  rootUsername: root
-  rootPassword: "NLfkP9w4524k38YSdrUtJrTlyXDmNs62N9A8DeJi"  # Change in production!
-  storage:
-    dataSize: 5Gi
-    configSize: 1Gi
-    storageClass: ""  # Use default storage class
-
 # Server configuration
 server:
   name: ccxt-bot-server

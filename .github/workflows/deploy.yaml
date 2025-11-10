@@ -10,7 +10,7 @@ env:
   NAME: ccxt-bot
   DOCKER_REGISTRY: ghcr.io
   DOCKER_ORG: berryhill
-  DOCKER_TAG: ${{ github.sha }}
+  DOCKER_TAG: 0.0.1
   GITHUB_USER: berryhill
   GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
   KUBECONFIG_SECRET: ${{ secrets[format('{0}_KUBECONFIG', github.ref_name)] }}

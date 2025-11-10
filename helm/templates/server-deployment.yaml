@@ -29,19 +29,11 @@ spec:
               value: {{ .Values.server.environment }}
             - name: ENV
               value: {{ .Values.server.environment }}
-            {{- if .Values.server.doppler.enabled }}
             - name: DOPPLER_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.server.name }}-secret
                   key: doppler-token
-            {{- else }}
-            - name: DB_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.server.name }}-secret
-                  key: db-url
-            {{- end }}
           livenessProbe:
             httpGet:
               path: /health

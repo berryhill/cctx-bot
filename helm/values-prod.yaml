@@ -1,20 +1,5 @@
 # Production environment values
 
-# MongoDB configuration
-mongodb:
-  name: ccxt-bot-mongodb
-  image:
-    repository: mongo
-    tag: "5.0"
-    pullPolicy: IfNotPresent
-  database: ccxt-bot
-  rootUsername: root
-  rootPassword: "CHANGE_ME_IN_PRODUCTION"  # Override this with --set or use secrets management
-  storage:
-    dataSize: 20Gi
-    configSize: 2Gi
-    storageClass: ""  # Use default storage class or specify your SSD storage class
-
 # Server configuration
 server:
   name: ccxt-bot-server
