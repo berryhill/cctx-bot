@@ -306,8 +306,8 @@ async function main(app) {
                 case 'CS':
                 case 'CB':
                     return 'spot'
-                case 'L':
-                case 'SH':
+                case 'LF':
+                case 'SF':
                 case 'CLF':
                 case 'CSF':
                     return 'futures'
@@ -328,12 +328,12 @@ async function main(app) {
                 case 'ST':
                 case 'CS':
                     return 'S'
-                case 'L':
-                    return 'L'
-                case 'SH':
+                case 'LF':
+                    return 'LF'
+                case 'SF':
                 case 'CLF':
                 case 'CSF':
-                    return 'SH'
+                    return 'SF'
                 default:
                     return 'B'
             }
@@ -701,12 +701,13 @@ async function main(app) {
 
             } else if (command === 'CL' || command === 'CB') {
                 // CL = Close Long (new), CB = legacy alias
-                console.log('   🔻 Executing CLOSE LONG position...')
+                console.log('   🔻 Executing CLOSE LONG SPOT position...')
 
-                // 1. Get current position from open_positions
+                // 1. Get current position from open_positions (spot only)
                 const position = await Open_Positions.findOne({
                     tag: orderTag,
-                    account: input.a
+                    account: input.a,
+                    market_type: 'spot'
                 })
 
                 if (!position) {
@@ -750,12 +751,12 @@ async function main(app) {
 
                     if (remainingContracts === 0 || percentage >= 100) {
                         // Full close - delete position
-                        await Open_Positions.deleteOne({ tag: orderTag, account: input.a })
+                        await Open_Positions.deleteOne({ tag: orderTag, account: input.a, market_type: 'spot' })
                         console.log('✅ Position fully closed - removed from open_positions')
                     } else {
                         // Partial close - update position
                         await Open_Positions.updateOne(
-                            { tag: orderTag, account: input.a },
+                            { tag: orderTag, account: input.a, market_type: 'spot' },
                             {
                                 $set: {
                                     total_contracts: remainingContracts,
@@ -772,6 +773,7 @@ async function main(app) {
                         account: input.a,
                         symbol: input.s,
                         side: 'S', // Sold to close longs
+                        market_type: 'spot',
                         contracts_closed: contractsToClose,
                         close_price: fillPrice,
                         percentage: percentage,
@@ -803,12 +805,13 @@ async function main(app) {
 
             } else if (command === 'CS') {
                 // CS = Close Short
-                console.log('   🔺 Executing CLOSE SHORT position...')
+                console.log('   🔺 Executing CLOSE SHORT SPOT position...')
 
-                // 1. Get current position from open_positions
+                // 1. Get current position from open_positions (spot only)
                 const position = await Open_Positions.findOne({
                     tag: orderTag,
-                    account: input.a
+                    account: input.a,
+                    market_type: 'spot'
                 })
 
                 if (!position) {
@@ -852,12 +855,12 @@ async function main(app) {
 
                     if (remainingContracts === 0 || percentage >= 100) {
                         // Full close - delete position
-                        await Open_Positions.deleteOne({ tag: orderTag, account: input.a })
+                        await Open_Positions.deleteOne({ tag: orderTag, account: input.a, market_type: 'spot' })
                         console.log('✅ Position fully closed - removed from open_positions')
                     } else {
                         // Partial close - update position
                         await Open_Positions.updateOne(
-                            { tag: orderTag, account: input.a },
+                            { tag: orderTag, account: input.a, market_type: 'spot' },
                             {
                                 $set: {
                                     total_contracts: remainingContracts,
@@ -874,6 +877,7 @@ async function main(app) {
                         account: input.a,
                         symbol: input.s,
                         side: 'B', // Bought to close shorts
+                        market_type: 'spot',
                         contracts_closed: contractsToClose,
                         close_price: fillPrice,
                         percentage: percentage,
@@ -902,6 +906,215 @@ async function main(app) {
                     })
                     return {code: 500, message:'Unable to close short position', input:input, e:e}
                 }
+
+            } else if (command === 'CLF') {
+                // CLF = Close Long Futures
+                console.log('   🔻 Executing CLOSE LONG FUTURES position...')
+
+                // 1. Get current position from open_positions (futures only)
+                const position = await Open_Positions.findOne({
+                    tag: orderTag,
+                    account: input.a,
+                    market_type: 'futures'
+                })
+
+                if (!position) {
+                    console.log(`❌ No open futures position found for tag "${orderTag}"`)
+                    return {code: 404, message:'No open futures position found for tag', input:input}
+                }
+
+                if (position.side !== 'LF') {
+                    console.log(`❌ Cannot CLF (close long futures) on short position. Position side: ${position.side}`)
+                    return {code: 400, message:'Cannot CLF (close long futures) on short position', input:input}
+                }
+
+                // 2. Parse percentage and calculate contracts to close
+                const percentage = parsePercentage(input.q)
+                const contractsToClose = Math.floor(position.total_contracts * (percentage / 100))
+
+                if (contractsToClose === 0) {
+                    console.log(`❌ Percentage too small, 0 contracts to close`)
+                    return {code: 400, message:'Percentage too small, 0 contracts to close', input:input}
+                }
+
+                console.log(`📊 Position: ${position.total_contracts} contracts @ avg ${position.average_price}`)
+                console.log(`   Closing ${percentage}% = ${contractsToClose} contracts`)
+
+                // 3. Place market sell order to close long futures
+                try {
+                    const closeOrder = await trade.marketSellOrder(symbol, contractsToClose)
+                    const fillPrice = closeOrder.avgPx || closeOrder.price || closeOrder.lastPx || 0
+
+                    console.log('✅ CCXT - Bitmex Close Long Futures Order Complete: ', new Date())
+                    console.log('   Fill price:', fillPrice)
+
+                    // 4. Calculate P&L
+                    const pnl = (fillPrice - position.average_price) * contractsToClose
+                    const pnlPercentage = (pnl / (position.average_price * contractsToClose)) * 100
+
+                    console.log(`   P&L: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
+
+                    // 5. Update position or delete if fully closed
+                    const remainingContracts = position.total_contracts - contractsToClose
+
+                    if (remainingContracts === 0 || percentage >= 100) {
+                        // Full close - delete position
+                        await Open_Positions.deleteOne({ tag: orderTag, account: input.a, market_type: 'futures' })
+                        console.log('✅ Position fully closed - removed from open_positions')
+                    } else {
+                        // Partial close - update position
+                        await Open_Positions.updateOne(
+                            { tag: orderTag, account: input.a, market_type: 'futures' },
+                            {
+                                $set: {
+                                    total_contracts: remainingContracts,
+                                    last_updated: new Date()
+                                }
+                            }
+                        )
+                        console.log(`✅ Position updated: ${remainingContracts} contracts remaining`)
+                    }
+
+                    // 6. Record close action in closed_trades
+                    const closeTrade = new Closed_Trades({
+                        tag: orderTag,
+                        account: input.a,
+                        symbol: input.s,
+                        side: 'SF', // Short futures to close long futures
+                        market_type: 'futures',
+                        contracts_closed: contractsToClose,
+                        close_price: fillPrice,
+                        percentage: percentage,
+                        order_id: closeOrder.orderID || closeOrder.id || closeOrder.clOrdID || undefined,
+                        position_before: position.total_contracts,
+                        position_after: remainingContracts,
+                        average_entry_price: position.average_price,
+                        pnl: pnl,
+                        pnl_percentage: pnlPercentage,
+                        metadata: input,
+                        closed_at: new Date()
+                    })
+                    await closeTrade.save()
+                    console.log('✅ Close action recorded in closed_trades')
+
+                    return {code: 200, message:'Success closing long futures position', input:input, pnl: pnl}
+
+                } catch (e) {
+                    console.log('❌ ERROR in Close Long Futures Order:')
+                    console.log('   Error:', e)
+                    inactiveList.push({
+                        'username': alias,
+                        'action': 'createMarketOrder[CLF]',
+                        'input': input,
+                        'error': e
+                    })
+                    return {code: 500, message:'Unable to close long futures position', input:input, e:e}
+                }
+
+            } else if (command === 'CSF') {
+                // CSF = Close Short Futures
+                console.log('   🔺 Executing CLOSE SHORT FUTURES position...')
+
+                // 1. Get current position from open_positions (futures only)
+                const position = await Open_Positions.findOne({
+                    tag: orderTag,
+                    account: input.a,
+                    market_type: 'futures'
+                })
+
+                if (!position) {
+                    console.log(`❌ No open futures position found for tag "${orderTag}"`)
+                    return {code: 404, message:'No open futures position found for tag', input:input}
+                }
+
+                if (position.side !== 'SF') {
+                    console.log(`❌ Cannot CSF (close short futures) on long position. Position side: ${position.side}`)
+                    return {code: 400, message:'Cannot CSF (close short futures) on long position', input:input}
+                }
+
+                // 2. Parse percentage and calculate contracts to close
+                const percentage = parsePercentage(input.q)
+                const contractsToClose = Math.floor(position.total_contracts * (percentage / 100))
+
+                if (contractsToClose === 0) {
+                    console.log(`❌ Percentage too small, 0 contracts to close`)
+                    return {code: 400, message:'Percentage too small, 0 contracts to close', input:input}
+                }
+
+                console.log(`📊 Position: ${position.total_contracts} contracts @ avg ${position.average_price}`)
+                console.log(`   Closing ${percentage}% = ${contractsToClose} contracts`)
+
+                // 3. Place market buy order to close short futures
+                try {
+                    const closeOrder = await trade.marketBuyOrder(symbol, contractsToClose)
+                    const fillPrice = closeOrder.avgPx || closeOrder.price || closeOrder.lastPx || 0
+
+                    console.log('✅ CCXT - Bitmex Close Short Futures Order Complete: ', new Date())
+                    console.log('   Fill price:', fillPrice)
+
+                    // 4. Calculate P&L (inverted for shorts)
+                    const pnl = (position.average_price - fillPrice) * contractsToClose
+                    const pnlPercentage = (pnl / (position.average_price * contractsToClose)) * 100
+
+                    console.log(`   P&L: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
+
+                    // 5. Update position or delete if fully closed
+                    const remainingContracts = position.total_contracts - contractsToClose
+
+                    if (remainingContracts === 0 || percentage >= 100) {
+                        // Full close - delete position
+                        await Open_Positions.deleteOne({ tag: orderTag, account: input.a, market_type: 'futures' })
+                        console.log('✅ Position fully closed - removed from open_positions')
+                    } else {
+                        // Partial close - update position
+                        await Open_Positions.updateOne(
+                            { tag: orderTag, account: input.a, market_type: 'futures' },
+                            {
+                                $set: {
+                                    total_contracts: remainingContracts,
+                                    last_updated: new Date()
+                                }
+                            }
+                        )
+                        console.log(`✅ Position updated: ${remainingContracts} contracts remaining`)
+                    }
+
+                    // 6. Record close action in closed_trades
+                    const closeTrade = new Closed_Trades({
+                        tag: orderTag,
+                        account: input.a,
+                        symbol: input.s,
+                        side: 'LF', // Long futures to close short futures
+                        market_type: 'futures',
+                        contracts_closed: contractsToClose,
+                        close_price: fillPrice,
+                        percentage: percentage,
+                        order_id: closeOrder.orderID || closeOrder.id || closeOrder.clOrdID || undefined,
+                        position_before: position.total_contracts,
+                        position_after: remainingContracts,
+                        average_entry_price: position.average_price,
+                        pnl: pnl,
+                        pnl_percentage: pnlPercentage,
+                        metadata: input,
+                        closed_at: new Date()
+                    })
+                    await closeTrade.save()
+                    console.log('✅ Close action recorded in closed_trades')
+
+                    return {code: 200, message:'Success closing short futures position', input:input, pnl: pnl}
+
+                } catch (e) {
+                    console.log('❌ ERROR in Close Short Futures Order:')
+                    console.log('   Error:', e)
+                    inactiveList.push({
+                        'username': alias,
+                        'action': 'createMarketOrder[CSF]',
+                        'input': input,
+                        'error': e
+                    })
+                    return {code: 500, message:'Unable to close short futures position', input:input, e:e}
+                }
+
             } else {
                 inactiveList.push({
                     'username': alias,
@@ -1577,6 +1790,42 @@ async function main(app) {
                         //Q=percentage (e.g., "50%")
                         mainLog.print(`Trade:${alias}`,"M-CS")
                         return createMarketOrder(symbol, input)
+
+                    case 'LF':
+                        //Market Long Futures
+                        if(tp !== '0%') {
+                            console.log('   ➡️  Market Long Futures WITH TP')
+                            mainLog.print(`Trade:${alias}`,"M-LF-TP")
+                            return createMarketTPOrder(symbol,input)
+                        } else {
+                            console.log('   ➡️  Market Long Futures WITHOUT TP')
+                            mainLog.print(`Trade:${alias}`,"M-LF-TP0")
+                            return createMarketOrder(symbol,input)
+                        }
+
+                    case 'SF':
+                        //Market Short Futures
+                        if(tp !== '0%') {
+                            console.log('   ➡️  Market Short Futures WITH TP')
+                            mainLog.print(`Trade:${alias}`,"M-SF-TP")
+                            return createMarketTPOrder(symbol,input)
+                        } else {
+                            console.log('   ➡️  Market Short Futures WITHOUT TP')
+                            mainLog.print(`Trade:${alias}`,"M-SF-TP0")
+                            return createMarketOrder(symbol,input)
+                        }
+
+                    case 'CLF':
+                        //Market Close Long Futures
+                        //Q=percentage (e.g., "50%")
+                        mainLog.print(`Trade:${alias}`,"M-CLF")
+                        return createMarketOrder(symbol, input)
+
+                    case 'CSF':
+                        //Market Close Short Futures
+                        //Q=percentage (e.g., "50%")
+                        mainLog.print(`Trade:${alias}`,"M-CSF")
+                        return createMarketOrder(symbol, input)
                 }
                 break;
             case 'L':
@@ -1602,6 +1851,24 @@ async function main(app) {
                         } else {
                             //NO TP - Only Limit Order Sell
                             mainLog.print(`Trade:${alias}`,"L-S-TP0")
+                            return createLimitOrder(symbol,input)
+                        }
+                    case 'LF':
+                        //Limit Order Long Futures
+                        if(tp !== '0%') {
+                            mainLog.print(`Trade:${alias}`,"L-LF-TP")
+                            return createLimitTPOrder(symbol,input)
+                        } else {
+                            mainLog.print(`Trade:${alias}`,"L-LF-TP0")
+                            return createLimitOrder(symbol,input)
+                        }
+                    case 'SF':
+                        //Limit Order Short Futures
+                        if(tp !== '0%') {
+                            mainLog.print(`Trade:${alias}`,"L-SF-TP")
+                            return createLimitTPOrder(symbol,input)
+                        } else {
+                            mainLog.print(`Trade:${alias}`,"L-SF-TP0")
                             return createLimitOrder(symbol,input)
                         }
                     default:

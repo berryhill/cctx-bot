@@ -13,7 +13,7 @@ const postSchema = new Schema({
     "c": {
         type:String,
         required: true,
-        enum: ['B','S','BT','ST','CL','CS','L','SH','CLF','CSF'],
+        enum: ['B','S','BT','ST','CL','CS','LF','SF','CLF','CSF'],
         message: {
             type: 'Command must be a string.',
             required: 'Command is required.'
