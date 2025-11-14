@@ -100,7 +100,7 @@ async function main(app) {
         console.log('🏷️  Tag:', tag, tag === 'notag' ? '(default)' : '')
         console.log('💰 Price:', p)
 
-        //<---------------------Conversions and Array Pushes-----------------------> 
+        //<---------------------Conversions and Array Pushes----------------------->
         //Limit Decimals/Rounding for Exchange Opening Trades
         //Tradingview Symbol to CCXT Symbol
         //FOR CCXT USE
@@ -331,6 +331,34 @@ async function main(app) {
                 default:
                     return 'B'
             }
+        }
+
+        //Helper function to validate perpetual futures symbols
+        function isValidPerpetualSymbol(symbol) {
+            const validPerps = [
+                'BTC/USDT:USDT',    // Bitcoin perpetual
+                'ETH/USDT:USDT',    // Ethereum perpetual
+                'SOL/USDT:USDT',    // Solana perpetual
+                'XRP/USDT:USDT',    // Ripple perpetual
+                'DOGE/USDT:USDT',   // Dogecoin perpetual
+                'ADA/USDT:USDT',    // Cardano perpetual
+                'AVAX/USDT:USDT',   // Avalanche perpetual
+                'MATIC/USDT:USDT',  // Polygon perpetual
+                'DOT/USDT:USDT',    // Polkadot perpetual
+                'LTC/USDT:USDT',    // Litecoin perpetual
+                'LINK/USDT:USDT',   // Chainlink perpetual
+                'BCH/USDT:USDT',    // Bitcoin Cash perpetual
+                'UNI/USDT:USDT',    // Uniswap perpetual
+                'ATOM/USDT:USDT',   // Cosmos perpetual
+                'ETC/USDT:USDT',    // Ethereum Classic perpetual
+                'FIL/USDT:USDT',    // Filecoin perpetual
+                'APT/USDT:USDT',    // Aptos perpetual
+                'ARB/USDT:USDT',    // Arbitrum perpetual
+                'OP/USDT:USDT',     // Optimism perpetual
+                'SUI/USDT:USDT',    // Sui perpetual
+                'BMEX/USDT:USDT'    // BitMEX Token perpetual
+            ]
+            return validPerps.includes(symbol)
         }
 
         //Function to insert trades with specific tag & side
@@ -1705,14 +1733,23 @@ async function main(app) {
             })
         }
 
-        //<---------------------END-----------------------> 
+        //<---------------------END----------------------->
+
+        // Validate symbol for futures commands
+        const marketType = getMarketType(command)
+        if (marketType === 'futures' && !isValidPerpetualSymbol(symbol)) {
+            console.log(`❌ Invalid perpetual futures symbol: ${symbol}`)
+            mainLog.print('Validation', `Invalid perpetual symbol for futures command: ${symbol}`)
+            return sendJSON(res, 400, `Invalid perpetual futures symbol. Must be one of: BTC/USDT:USDT, ETH/USDT:USDT, SOL/USDT:USDT, XRP/USDT:USDT, etc.`, {}, null)
+        }
+        console.log('✅ Symbol validation passed for', marketType, 'market')
 
         //Call appropiate function based on post parameters, Market or Limit => Buy or Sell => With or Without TP.
         console.log('\n🔀 Entering main switch statement')
         console.log('   Type:', type)
         console.log('   Command:', command)
         console.log('   TP:', tp)
-        
+
         switch(type) {
             case 'M':
                 console.log('   ➡️  Market Order Path')
