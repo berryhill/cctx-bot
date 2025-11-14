@@ -14,10 +14,10 @@ const postSchema = new Schema({
     "c": {
         type:String,
         required: true,
-        enum: ['B','S','BT','ST','CL','CS'],
+        enum: ['B','S','BT','ST','CL','CS','L','SH','CLF','CSF'],
         message: {
-            type: 'Side must be a string.',
-            required: 'Side is required.'
+            type: 'Command must be a string.',
+            required: 'Command is required.'
             }
     },
     "t": {

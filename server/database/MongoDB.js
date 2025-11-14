@@ -41,7 +41,8 @@ const openTradesSchema = new Schema({
     tag: { type: String, required: true, index: true },
     account: { type: String, required: true, index: true },
     symbol: { type: String, required: true },
-    side: { type: String, match:/^B$|^S$/, required: true },
+    side: { type: String, match:/^B$|^S$|^L$|^SH$/, required: true },
+    market_type: { type: String, enum: ['spot', 'futures'], required: false, default: 'spot' },
     alias: { type: String, required: true },
     order_id: { type: String, required: false },
     price: { type: Number, required: true },
@@ -56,7 +57,8 @@ const openPositionsSchema = new Schema({
     tag: { type: String, required: true, index: true },
     account: { type: String, required: true, index: true },
     symbol: { type: String, required: true },
-    side: { type: String, match:/^B$|^S$/, required: true },
+    side: { type: String, match:/^B$|^S$|^L$|^SH$/, required: true },
+    market_type: { type: String, enum: ['spot', 'futures'], required: false, default: 'spot' },
     total_contracts: { type: Number, required: true, min: 0 },
     average_price: { type: Number, required: true },
     trade_count: { type: Number, required: true, default: 0 },
@@ -66,14 +68,15 @@ const openPositionsSchema = new Schema({
     metadata: { type: Object, required: false }
 })
 
-// Create unique compound index for tag + account
-openPositionsSchema.index({ tag: 1, account: 1 }, { unique: true })
+// Create unique compound index for tag + account + market_type
+openPositionsSchema.index({ tag: 1, account: 1, market_type: 1 }, { unique: true })
 
 const closedTradesSchema = new Schema({
     tag: { type: String, required: true, index: true },
     account: { type: String, required: true, index: true },
     symbol: { type: String, required: true },
-    side: { type: String, match:/^B$|^S$/, required: true },
+    side: { type: String, match:/^B$|^S$|^L$|^SH$/, required: true },
+    market_type: { type: String, enum: ['spot', 'futures'], required: false, default: 'spot' },
     contracts_closed: { type: Number, required: true },
     close_price: { type: Number, required: true },
     percentage: { type: Number, required: true },

@@ -85,7 +85,8 @@ async function main(app) {
         //CCXT Object from Logged in User
         const trade = ccxt
         //General Variables from Post-Syntax in more readable format.
-        const symbol = resolveSymbol(input.s);
+        // const symbol = resolveSymbol(input.s);
+        const symbol = input.s
         const command = input.c //B, S, CB, CS
         const type = input.t //M, L
         const tp = input.tp || '0%' // Default to '0%' if not provided
@@ -294,15 +295,63 @@ async function main(app) {
             return 100 // Default to 100% if invalid
         }
 
+        //Helper function to determine market type from command
+        function getMarketType(command) {
+            switch(command) {
+                case 'B':
+                case 'S':
+                case 'BT':
+                case 'ST':
+                case 'CL':
+                case 'CS':
+                case 'CB':
+                    return 'spot'
+                case 'L':
+                case 'SH':
+                case 'CLF':
+                case 'CSF':
+                    return 'futures'
+                default:
+                    return 'spot'
+            }
+        }
+
+        //Helper function to resolve side from command
+        function resolveSide(command) {
+            switch(command) {
+                case 'B':
+                case 'BT':
+                case 'CB':
+                case 'CL':
+                    return 'B'
+                case 'S':
+                case 'ST':
+                case 'CS':
+                    return 'S'
+                case 'L':
+                    return 'L'
+                case 'SH':
+                case 'CLF':
+                case 'CSF':
+                    return 'SH'
+                default:
+                    return 'B'
+            }
+        }
+
         //Function to insert trades with specific tag & side
         async function pushTagTrades(tag, data, input) {
             console.log('\n📌 pushTagTrades() called')
             console.log('   Tag:', tag)
+            console.log('   Command:', input.c)
             console.log('   Data Side:', data.side)
             console.log('   Data object keys:', Object.keys(data))
             console.log('   Data FULL:', JSON.stringify(data, null, 2))
 
-            const side = data.side === 'sell' ? 'S' : 'B'
+            // Determine market type and side based on command
+            const marketType = getMarketType(input.c)
+            const side = resolveSide(input.c)
+            console.log('   Market Type:', marketType)
             console.log('   Resolved Side:', side)
 
             // DEBUG: Log all possible quantity fields
@@ -339,6 +388,7 @@ async function main(app) {
                 account: input.a,
                 symbol: input.s,
                 side: side,
+                market_type: marketType,
                 alias: alias,
                 order_id: orderId || undefined, // Use undefined instead of empty string
                 price: price,
@@ -362,10 +412,17 @@ async function main(app) {
                 console.log('📊 Updating open_positions...')
                 const existingPosition = await Open_Positions.findOne({
                     tag: tag,
-                    account: input.a
+                    account: input.a,
+                    market_type: marketType
                 })
 
                 if (existingPosition) {
+                    // Verify side matches
+                    if (existingPosition.side !== side) {
+                        console.log(`⚠️  WARNING: Existing ${marketType} position side (${existingPosition.side}) doesn't match new trade side (${side})`)
+                        console.log(`⚠️  This could indicate mixed position direction for same tag`)
+                    }
+
                     // Update existing position using num_contracts
                     const newTotalContracts = existingPosition.total_contracts + numContracts
                     const newAvgPrice = numContracts > 0 ? (
@@ -373,13 +430,13 @@ async function main(app) {
                         (price * numContracts)
                     ) / newTotalContracts : existingPosition.average_price
 
-                    console.log(`   Existing position found - updating`)
+                    console.log(`   Existing ${marketType} position found - updating`)
                     console.log(`   Old: ${existingPosition.total_contracts} @ ${existingPosition.average_price}`)
                     console.log(`   Adding: ${numContracts} @ ${price}`)
                     console.log(`   New: ${newTotalContracts} @ ${newAvgPrice.toFixed(4)}`)
 
                     await Open_Positions.updateOne(
-                        { tag: tag, account: input.a },
+                        { tag: tag, account: input.a, market_type: marketType },
                         {
                             $set: {
                                 total_contracts: newTotalContracts,
@@ -393,12 +450,13 @@ async function main(app) {
                     console.log('✅ Position updated')
                 } else {
                     // Create new position using num_contracts
-                    console.log(`   No existing position - creating new`)
+                    console.log(`   No existing ${marketType} position - creating new`)
                     const newPosition = new Open_Positions({
                         tag: tag,
                         account: input.a,
                         symbol: input.s,
                         side: side,
+                        market_type: marketType,
                         total_contracts: numContracts,
                         average_price: price,
                         trade_count: 1,
