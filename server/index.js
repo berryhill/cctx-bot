@@ -333,6 +333,34 @@ async function main(app) {
             }
         }
 
+        //Helper function to validate spot symbols
+        function isValidSpotSymbol(symbol) {
+            const validSpots = [
+                'BTC/USDT',         // Bitcoin spot
+                'ETH/USDT',         // Ethereum spot
+                'SOL/USDT',         // Solana spot
+                'XRP/USDT',         // Ripple spot
+                'DOGE/USDT',        // Dogecoin spot
+                'ADA/USDT',         // Cardano spot
+                'AVAX/USDT',        // Avalanche spot
+                'MATIC/USDT',       // Polygon spot
+                'DOT/USDT',         // Polkadot spot
+                'LTC/USDT',         // Litecoin spot
+                'LINK/USDT',        // Chainlink spot
+                'BCH/USDT',         // Bitcoin Cash spot
+                'UNI/USDT',         // Uniswap spot
+                'ATOM/USDT',        // Cosmos spot
+                'ETC/USDT',         // Ethereum Classic spot
+                'FIL/USDT',         // Filecoin spot
+                'APT/USDT',         // Aptos spot
+                'ARB/USDT',         // Arbitrum spot
+                'OP/USDT',          // Optimism spot
+                'SUI/USDT',         // Sui spot
+                'BMEX/USDT'         // BitMEX Token spot
+            ]
+            return validSpots.includes(symbol)
+        }
+
         //Helper function to validate perpetual futures symbols
         function isValidPerpetualSymbol(symbol) {
             const validPerps = [
@@ -1735,8 +1763,13 @@ async function main(app) {
 
         //<---------------------END----------------------->
 
-        // Validate symbol for futures commands
+        // Validate symbol based on market type
         const marketType = getMarketType(command)
+        if (marketType === 'spot' && !isValidSpotSymbol(symbol)) {
+            console.log(`❌ Invalid spot symbol: ${symbol}`)
+            mainLog.print('Validation', `Invalid spot symbol for spot command: ${symbol}`)
+            return sendJSON(res, 400, `Invalid spot symbol. Must be one of: BTC/USDT, ETH/USDT, SOL/USDT, XRP/USDT, etc.`, {}, null)
+        }
         if (marketType === 'futures' && !isValidPerpetualSymbol(symbol)) {
             console.log(`❌ Invalid perpetual futures symbol: ${symbol}`)
             mainLog.print('Validation', `Invalid perpetual symbol for futures command: ${symbol}`)
