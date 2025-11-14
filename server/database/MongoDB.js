@@ -51,11 +51,49 @@ const openTradesSchema = new Schema({
     created: { type: Date, default: Date.now }
 })
 
+const openPositionsSchema = new Schema({
+    tag: { type: String, required: true, index: true },
+    account: { type: String, required: true, index: true },
+    symbol: { type: String, required: true },
+    side: { type: String, match:/^B$|^S$/, required: true },
+    total_contracts: { type: Number, required: true, min: 0 },
+    average_price: { type: Number, required: true },
+    trade_count: { type: Number, required: true, default: 0 },
+    trade_ids: [{ type: String }],
+    first_opened: { type: Date, required: true },
+    last_updated: { type: Date, required: true },
+    metadata: { type: Object, required: false }
+})
+
+// Create unique compound index for tag + account
+openPositionsSchema.index({ tag: 1, account: 1 }, { unique: true })
+
+const closedTradesSchema = new Schema({
+    tag: { type: String, required: true, index: true },
+    account: { type: String, required: true, index: true },
+    symbol: { type: String, required: true },
+    side: { type: String, match:/^B$|^S$/, required: true },
+    contracts_closed: { type: Number, required: true },
+    close_price: { type: Number, required: true },
+    percentage: { type: Number, required: true },
+    order_id: { type: String, required: false },
+    position_before: { type: Number, required: true },
+    position_after: { type: Number, required: true },
+    average_entry_price: { type: Number, required: true },
+    pnl: { type: Number, required: false },
+    pnl_percentage: { type: Number, required: false },
+    metadata: { type: Object, required: false },
+    closed_at: { type: Date, required: true, default: Date.now },
+    created: { type: Date, required: true, default: Date.now }
+})
+
 module.exports = {
     User: mongoose.model('User', userSchema),
     Trigger_Orders: mongoose.model('Trigger_Orders', triggerOrdersSchema),
     TO_Processed: mongoose.model('TO_Processed', tOrdersProcessedSchema),
     Open_Trades: mongoose.model('Open_Trades', openTradesSchema),
+    Open_Positions: mongoose.model('Open_Positions', openPositionsSchema),
+    Closed_Trades: mongoose.model('Closed_Trades', closedTradesSchema),
     database: mongoose.connect(process.env.DB_URL, {
         useNewUrlParser: true,
         useUnifiedTopology: true,

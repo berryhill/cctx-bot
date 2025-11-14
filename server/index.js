@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const mongoose = require('mongoose');
 const MongoDB = require('./database/MongoDB');
-const { User, Trigger_Orders, TO_Processed, Open_Trades } = require('./database/MongoDB');
+const { User, Trigger_Orders, TO_Processed, Open_Trades, Open_Positions, Closed_Trades } = require('./database/MongoDB');
 const postSchema = require('./validation/postSchema');
 const CreateCCXT = require('./CreateCCXT');
 const BitmexStream = require('./wss/wss_stream');
@@ -279,6 +279,20 @@ async function main(app) {
             return calcMultiplierVal * defaultSize
         }
 
+        //Helper function to parse percentage from quantity string
+        function parsePercentage(qString) {
+            const percentMatch = qString.match(/^(\d+(?:\.\d+)?)%$/)
+            if (percentMatch) {
+                return parseFloat(percentMatch[1])
+            }
+            // If it's "100" without %, treat as 100%
+            const numValue = parseFloat(qString)
+            if (!isNaN(numValue) && numValue > 0 && numValue <= 100) {
+                return numValue
+            }
+            return 100 // Default to 100% if invalid
+        }
+
         //Function to insert trades with specific tag & side
         async function pushTagTrades(tag, data, input) {
             console.log('\n📌 pushTagTrades() called')
@@ -320,6 +334,59 @@ async function main(app) {
                 await newTrade.save()
                 console.log('✅ Trade saved to database')
                 tradeVerbose ? console.log("   Trade:", JSON.stringify(newTrade,null,1) ) : ''
+
+                // Update or create position in open_positions
+                console.log('📊 Updating open_positions...')
+                const existingPosition = await Open_Positions.findOne({
+                    tag: tag,
+                    account: input.a
+                })
+
+                if (existingPosition) {
+                    // Update existing position
+                    const newTotalContracts = existingPosition.total_contracts + contracts
+                    const newAvgPrice = (
+                        (existingPosition.average_price * existingPosition.total_contracts) +
+                        (price * contracts)
+                    ) / newTotalContracts
+
+                    console.log(`   Existing position found - updating`)
+                    console.log(`   Old: ${existingPosition.total_contracts} @ ${existingPosition.average_price}`)
+                    console.log(`   Adding: ${contracts} @ ${price}`)
+                    console.log(`   New: ${newTotalContracts} @ ${newAvgPrice.toFixed(4)}`)
+
+                    await Open_Positions.updateOne(
+                        { tag: tag, account: input.a },
+                        {
+                            $set: {
+                                total_contracts: newTotalContracts,
+                                average_price: newAvgPrice,
+                                last_updated: new Date()
+                            },
+                            $inc: { trade_count: 1 },
+                            $push: { trade_ids: orderId || 'unknown' }
+                        }
+                    )
+                    console.log('✅ Position updated')
+                } else {
+                    // Create new position
+                    console.log(`   No existing position - creating new`)
+                    const newPosition = new Open_Positions({
+                        tag: tag,
+                        account: input.a,
+                        symbol: input.s,
+                        side: side,
+                        total_contracts: contracts,
+                        average_price: price,
+                        trade_count: 1,
+                        trade_ids: orderId ? [orderId] : [],
+                        first_opened: new Date(),
+                        last_updated: new Date(),
+                        metadata: input
+                    })
+                    await newPosition.save()
+                    console.log('✅ New position created')
+                }
             } catch (error) {
                 console.error('❌ Error saving trade to database:')
                 console.error('   Error name:', error.name)
@@ -551,98 +618,209 @@ async function main(app) {
                     return {code: 500, message:'Unable to process trade', input:input, e:e}
                 })
 
-            } else if (command === 'CB') {
-                // Find all buy trades for this tag from database
-                const buyTrades = await Open_Trades.find({
-                    tag: tag,
-                    account: input.a,
-                    side: 'B'
+            } else if (command === 'CL' || command === 'CB') {
+                // CL = Close Long (new), CB = legacy alias
+                console.log('   🔻 Executing CLOSE LONG position...')
+
+                // 1. Get current position from open_positions
+                const position = await Open_Positions.findOne({
+                    tag: orderTag,
+                    account: input.a
                 })
 
-                if (buyTrades.length === 0) {
-                    console.log(`❌ No buy trades found for tag "${tag}"`)
-                    return {code: 404, message:'No buy trades found to close', input:input}
+                if (!position) {
+                    console.log(`❌ No open position found for tag "${orderTag}"`)
+                    return {code: 404, message:'No open position found for tag', input:input}
                 }
 
-                // Calculate total contracts to close
-                let totalContracts = 0
-                buyTrades.forEach(trade => {
-                    totalContracts += trade.contracts
-                })
+                if (position.side !== 'B') {
+                    console.log(`❌ Cannot CL (close long) on short position. Position side: ${position.side}`)
+                    return {code: 400, message:'Cannot CL (close long) on short position', input:input}
+                }
 
-                console.log(`📊 Closing ${buyTrades.length} buy trade(s), total contracts: ${totalContracts}`)
+                // 2. Parse percentage and calculate contracts to close
+                const percentage = parsePercentage(input.q)
+                const contractsToClose = Math.floor(position.total_contracts * (percentage / 100))
 
-                // Delete from database BEFORE placing order
-                await Open_Trades.deleteMany({
-                    tag: tag,
-                    account: input.a,
-                    side: 'B'
-                })
-                console.log(`✅ Removed ${buyTrades.length} buy trades from database`)
+                if (contractsToClose === 0) {
+                    console.log(`❌ Percentage too small, 0 contracts to close`)
+                    return {code: 400, message:'Percentage too small, 0 contracts to close', input:input}
+                }
 
-                // WE CLOSE BUY ORDERS WITH MARKET SELL ORDERS (OPPOSITE DIRECTION)
-                trade.marketSellOrder(symbol, totalContracts)
-                    .then(async function(data) {
-                        console.log('CCXT - Bitmex Close Buy Order Complete: ', new Date)
-                        await pushTagTrades(orderTag, data, input)
-                        return {code: 200, message:'Success to Close Buy Orders', input:input}
+                console.log(`📊 Position: ${position.total_contracts} contracts @ avg ${position.average_price}`)
+                console.log(`   Closing ${percentage}% = ${contractsToClose} contracts`)
+
+                // 3. Place market sell order to close longs
+                try {
+                    const closeOrder = await trade.marketSellOrder(symbol, contractsToClose)
+                    const fillPrice = closeOrder.avgPx || closeOrder.price || closeOrder.lastPx || 0
+
+                    console.log('✅ CCXT - Bitmex Close Long Order Complete: ', new Date())
+                    console.log('   Fill price:', fillPrice)
+
+                    // 4. Calculate P&L
+                    const pnl = (fillPrice - position.average_price) * contractsToClose
+                    const pnlPercentage = (pnl / (position.average_price * contractsToClose)) * 100
+
+                    console.log(`   P&L: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
+
+                    // 5. Update position or delete if fully closed
+                    const remainingContracts = position.total_contracts - contractsToClose
+
+                    if (remainingContracts === 0 || percentage >= 100) {
+                        // Full close - delete position
+                        await Open_Positions.deleteOne({ tag: orderTag, account: input.a })
+                        console.log('✅ Position fully closed - removed from open_positions')
+                    } else {
+                        // Partial close - update position
+                        await Open_Positions.updateOne(
+                            { tag: orderTag, account: input.a },
+                            {
+                                $set: {
+                                    total_contracts: remainingContracts,
+                                    last_updated: new Date()
+                                }
+                            }
+                        )
+                        console.log(`✅ Position updated: ${remainingContracts} contracts remaining`)
+                    }
+
+                    // 6. Record close action in closed_trades
+                    const closeTrade = new Closed_Trades({
+                        tag: orderTag,
+                        account: input.a,
+                        symbol: input.s,
+                        side: 'S', // Sold to close longs
+                        contracts_closed: contractsToClose,
+                        close_price: fillPrice,
+                        percentage: percentage,
+                        order_id: closeOrder.orderID || closeOrder.id || closeOrder.clOrdID || undefined,
+                        position_before: position.total_contracts,
+                        position_after: remainingContracts,
+                        average_entry_price: position.average_price,
+                        pnl: pnl,
+                        pnl_percentage: pnlPercentage,
+                        metadata: input,
+                        closed_at: new Date()
                     })
-                    .catch(e => {
-                        inactiveList.push({
-                            'username': alias,
-                            'action': 'creatMarketOrder[1]',
-                            'input': input,
-                            'error':e
-                        })
-                        console.log("[1] Failed to submit Market Order: ",e)
-                        return {code: 500, message:'Unable to close Buy Orders', input:input, e:e}
+                    await closeTrade.save()
+                    console.log('✅ Close action recorded in closed_trades')
+
+                    return {code: 200, message:'Success closing long position', input:input, pnl: pnl}
+
+                } catch (e) {
+                    console.log('❌ ERROR in Close Long Order:')
+                    console.log('   Error:', e)
+                    inactiveList.push({
+                        'username': alias,
+                        'action': 'createMarketOrder[CL]',
+                        'input': input,
+                        'error': e
                     })
+                    return {code: 500, message:'Unable to close long position', input:input, e:e}
+                }
+
             } else if (command === 'CS') {
-                // Find all sell trades for this tag from database
-                const sellTrades = await Open_Trades.find({
-                    tag: tag,
-                    account: input.a,
-                    side: 'S'
+                // CS = Close Short
+                console.log('   🔺 Executing CLOSE SHORT position...')
+
+                // 1. Get current position from open_positions
+                const position = await Open_Positions.findOne({
+                    tag: orderTag,
+                    account: input.a
                 })
 
-                if (sellTrades.length === 0) {
-                    console.log(`❌ No sell trades found for tag "${tag}"`)
-                    return {code: 404, message:'No sell trades found to close', input:input}
+                if (!position) {
+                    console.log(`❌ No open position found for tag "${orderTag}"`)
+                    return {code: 404, message:'No open position found for tag', input:input}
                 }
 
-                // Calculate total contracts to close
-                let totalContracts = 0
-                sellTrades.forEach(trade => {
-                    totalContracts += trade.contracts
-                })
+                if (position.side !== 'S') {
+                    console.log(`❌ Cannot CS (close short) on long position. Position side: ${position.side}`)
+                    return {code: 400, message:'Cannot CS (close short) on long position', input:input}
+                }
 
-                console.log(`📊 Closing ${sellTrades.length} sell trade(s), total contracts: ${totalContracts}`)
+                // 2. Parse percentage and calculate contracts to close
+                const percentage = parsePercentage(input.q)
+                const contractsToClose = Math.floor(position.total_contracts * (percentage / 100))
 
-                // Delete from database BEFORE placing order
-                await Open_Trades.deleteMany({
-                    tag: tag,
-                    account: input.a,
-                    side: 'S'
-                })
-                console.log(`✅ Removed ${sellTrades.length} sell trades from database`)
+                if (contractsToClose === 0) {
+                    console.log(`❌ Percentage too small, 0 contracts to close`)
+                    return {code: 400, message:'Percentage too small, 0 contracts to close', input:input}
+                }
 
-                // WE CLOSE SELL ORDERS WITH MARKET BUY ORDERS (OPPOSITE DIRECTION)
-                trade.marketBuyOrder(symbol, totalContracts)
-                    .then(async function(data) {
-                        console.log('CCXT - Bitmex Close Sell Order Complete: ', new Date)
-                        await pushTagTrades(orderTag, data, input)
-                        return {code: 200, message:'Success to Close Sell Orders', input:input}
+                console.log(`📊 Position: ${position.total_contracts} contracts @ avg ${position.average_price}`)
+                console.log(`   Closing ${percentage}% = ${contractsToClose} contracts`)
+
+                // 3. Place market buy order to close shorts
+                try {
+                    const closeOrder = await trade.marketBuyOrder(symbol, contractsToClose)
+                    const fillPrice = closeOrder.avgPx || closeOrder.price || closeOrder.lastPx || 0
+
+                    console.log('✅ CCXT - Bitmex Close Short Order Complete: ', new Date())
+                    console.log('   Fill price:', fillPrice)
+
+                    // 4. Calculate P&L (inverted for shorts)
+                    const pnl = (position.average_price - fillPrice) * contractsToClose
+                    const pnlPercentage = (pnl / (position.average_price * contractsToClose)) * 100
+
+                    console.log(`   P&L: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
+
+                    // 5. Update position or delete if fully closed
+                    const remainingContracts = position.total_contracts - contractsToClose
+
+                    if (remainingContracts === 0 || percentage >= 100) {
+                        // Full close - delete position
+                        await Open_Positions.deleteOne({ tag: orderTag, account: input.a })
+                        console.log('✅ Position fully closed - removed from open_positions')
+                    } else {
+                        // Partial close - update position
+                        await Open_Positions.updateOne(
+                            { tag: orderTag, account: input.a },
+                            {
+                                $set: {
+                                    total_contracts: remainingContracts,
+                                    last_updated: new Date()
+                                }
+                            }
+                        )
+                        console.log(`✅ Position updated: ${remainingContracts} contracts remaining`)
+                    }
+
+                    // 6. Record close action in closed_trades
+                    const closeTrade = new Closed_Trades({
+                        tag: orderTag,
+                        account: input.a,
+                        symbol: input.s,
+                        side: 'B', // Bought to close shorts
+                        contracts_closed: contractsToClose,
+                        close_price: fillPrice,
+                        percentage: percentage,
+                        order_id: closeOrder.orderID || closeOrder.id || closeOrder.clOrdID || undefined,
+                        position_before: position.total_contracts,
+                        position_after: remainingContracts,
+                        average_entry_price: position.average_price,
+                        pnl: pnl,
+                        pnl_percentage: pnlPercentage,
+                        metadata: input,
+                        closed_at: new Date()
                     })
-                    .catch(e => {
-                        inactiveList.push({
-                            'username': alias,
-                            'action': 'creatMarketOrder[1]',
-                            'input': input,
-                            'error':e
-                        })
-                        console.log("[1] Failed to submit Market Order: ",e)
-                        return {code: 500, message:'Unable to close Sell Orders', input:input, e:e}
+                    await closeTrade.save()
+                    console.log('✅ Close action recorded in closed_trades')
+
+                    return {code: 200, message:'Success closing short position', input:input, pnl: pnl}
+
+                } catch (e) {
+                    console.log('❌ ERROR in Close Short Order:')
+                    console.log('   Error:', e)
+                    inactiveList.push({
+                        'username': alias,
+                        'action': 'createMarketOrder[CS]',
+                        'input': input,
+                        'error': e
                     })
+                    return {code: 500, message:'Unable to close short position', input:input, e:e}
+                }
             } else {
                 inactiveList.push({
                     'username': alias,
@@ -1303,14 +1481,19 @@ async function main(app) {
                             return createMarketTriggerOrderP(symbol,input)
                         }
 
+                    case 'CL':
+                        //Market Close Long
+                        //Q=percentage (e.g., "50%")
+                        mainLog.print(`Trade:${alias}`,"M-CL")
+                        return createMarketOrder(symbol, input)
                     case 'CB':
-                        //Market Close Buys
-                        //Always TP=NULL, P=NULL, Q=SUM(TAGS)
-                        mainLog.print(`Trade:${alias}`,"M-CB")
+                        //Market Close Buys (legacy alias for CL)
+                        //Q=percentage (e.g., "50%")
+                        mainLog.print(`Trade:${alias}`,"M-CB (legacy)")
                         return createMarketOrder(symbol, input)
                     case 'CS':
-                        //Market Close Sells
-                        //Always TP=NULL, P=NULL, Q=SUM(TAGS)
+                        //Market Close Short
+                        //Q=percentage (e.g., "50%")
                         mainLog.print(`Trade:${alias}`,"M-CS")
                         return createMarketOrder(symbol, input)
                 }
@@ -1791,6 +1974,77 @@ async function main(app) {
 
     app.get('/api/tpOrders', async function (req,res) {
         return res.json(tpOrders)
+    })
+
+    // Get all open positions (aggregated view)
+    app.get('/api/openPositions', async function (req, res) {
+        try {
+            const positions = await Open_Positions.find({}).sort({ last_updated: -1 })
+            return res.json(positions)
+        } catch (error) {
+            console.error('Error fetching open positions:', error)
+            return res.status(500).json({ error: 'Failed to fetch open positions' })
+        }
+    })
+
+    // Get specific position by tag
+    app.get('/api/openPositions/:tag', async function (req, res) {
+        try {
+            const position = await Open_Positions.findOne({ tag: req.params.tag })
+            if (!position) {
+                return res.status(404).json({ error: 'Position not found' })
+            }
+            return res.json(position)
+        } catch (error) {
+            console.error('Error fetching position:', error)
+            return res.status(500).json({ error: 'Failed to fetch position' })
+        }
+    })
+
+    // Get closed trades history
+    app.get('/api/closedTrades', async function (req, res) {
+        try {
+            const limit = parseInt(req.query.limit) || 100
+            const closes = await Closed_Trades.find({})
+                .sort({ closed_at: -1 })
+                .limit(limit)
+            return res.json(closes)
+        } catch (error) {
+            console.error('Error fetching closed trades:', error)
+            return res.status(500).json({ error: 'Failed to fetch closed trades' })
+        }
+    })
+
+    // Get closed trades for specific tag
+    app.get('/api/closedTrades/:tag', async function (req, res) {
+        try {
+            const closes = await Closed_Trades.find({ tag: req.params.tag })
+                .sort({ closed_at: -1 })
+            return res.json(closes)
+        } catch (error) {
+            console.error('Error fetching closed trades for tag:', error)
+            return res.status(500).json({ error: 'Failed to fetch closed trades' })
+        }
+    })
+
+    // Calculate total P&L for a tag
+    app.get('/api/pnl/:tag', async function (req, res) {
+        try {
+            const closes = await Closed_Trades.find({ tag: req.params.tag })
+            const totalPnl = closes.reduce((sum, close) => sum + (close.pnl || 0), 0)
+            const totalPnlPercentage = closes.reduce((sum, close) => sum + (close.pnl_percentage || 0), 0)
+
+            return res.json({
+                tag: req.params.tag,
+                total_pnl: totalPnl,
+                total_pnl_percentage: totalPnlPercentage,
+                close_count: closes.length,
+                closes: closes
+            })
+        } catch (error) {
+            console.error('Error calculating P&L:', error)
+            return res.status(500).json({ error: 'Failed to calculate P&L' })
+        }
     })
 
     // Get user positions directly from CCXT (bypasses WebSocket)
