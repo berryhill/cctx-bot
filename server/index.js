@@ -299,17 +299,38 @@ async function main(app) {
             console.log('   Tag:', tag)
             console.log('   Data Side:', data.side)
             console.log('   Data object keys:', Object.keys(data))
-            console.log('   Data:', JSON.stringify(data, null, 2))
+            console.log('   Data FULL:', JSON.stringify(data, null, 2))
 
             const side = data.side === 'sell' ? 'S' : 'B'
             console.log('   Resolved Side:', side)
+
+            // DEBUG: Log all possible quantity fields
+            console.log('   🔍 DEBUG - Quantity fields:')
+            console.log('      data.filled:', data.filled)
+            console.log('      data.cumQty:', data.cumQty)
+            console.log('      data.orderQty:', data.orderQty)
+            console.log('      data.lastQty:', data.lastQty)
+            console.log('      data.amount:', data.amount)
+            console.log('      data.contracts:', data.contracts)
 
             // Extract order ID from various possible fields
             const orderId = data.orderID || data.orderId || data.id || data.clOrdID || ''
             const price = data.avgPx || data.price || data.lastPx || 0
             const contracts = data.orderQty || data.contracts || data.cumQty || 0
 
-            console.log('   Extracted - orderId:', orderId, 'price:', price, 'contracts:', contracts)
+            // Extract num_contracts (the actual filled quantity for aggregation)
+            // Priority: filled/cumQty (actual fill) > orderQty (requested) > contracts (fallback)
+            const numContracts = parseInt(
+                data.filled ||
+                data.cumQty ||
+                data.orderQty ||
+                data.lastQty ||
+                data.amount ||
+                contracts ||
+                0
+            )
+
+            console.log('   ✅ Extracted - orderId:', orderId, 'price:', price, 'contracts:', contracts, 'num_contracts:', numContracts)
 
             // Save trade to database
             const newTrade = new Open_Trades({
@@ -321,6 +342,7 @@ async function main(app) {
                 order_id: orderId || undefined, // Use undefined instead of empty string
                 price: price,
                 contracts: contracts,
+                num_contracts: numContracts,
                 metadata: input,
                 opened: new Date()
             })
@@ -343,16 +365,16 @@ async function main(app) {
                 })
 
                 if (existingPosition) {
-                    // Update existing position
-                    const newTotalContracts = existingPosition.total_contracts + contracts
-                    const newAvgPrice = (
+                    // Update existing position using num_contracts
+                    const newTotalContracts = existingPosition.total_contracts + numContracts
+                    const newAvgPrice = numContracts > 0 ? (
                         (existingPosition.average_price * existingPosition.total_contracts) +
-                        (price * contracts)
-                    ) / newTotalContracts
+                        (price * numContracts)
+                    ) / newTotalContracts : existingPosition.average_price
 
                     console.log(`   Existing position found - updating`)
                     console.log(`   Old: ${existingPosition.total_contracts} @ ${existingPosition.average_price}`)
-                    console.log(`   Adding: ${contracts} @ ${price}`)
+                    console.log(`   Adding: ${numContracts} @ ${price}`)
                     console.log(`   New: ${newTotalContracts} @ ${newAvgPrice.toFixed(4)}`)
 
                     await Open_Positions.updateOne(
@@ -369,14 +391,14 @@ async function main(app) {
                     )
                     console.log('✅ Position updated')
                 } else {
-                    // Create new position
+                    // Create new position using num_contracts
                     console.log(`   No existing position - creating new`)
                     const newPosition = new Open_Positions({
                         tag: tag,
                         account: input.a,
                         symbol: input.s,
                         side: side,
-                        total_contracts: contracts,
+                        total_contracts: numContracts,
                         average_price: price,
                         trade_count: 1,
                         trade_ids: orderId ? [orderId] : [],

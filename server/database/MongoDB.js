@@ -46,6 +46,7 @@ const openTradesSchema = new Schema({
     order_id: { type: String, required: false },
     price: { type: Number, required: true },
     contracts: { type: Number, required: true },
+    num_contracts: { type: Number, required: false },
     metadata: { type: Object, required: false },
     opened: { type: Date, default: Date.now },
     created: { type: Date, default: Date.now }
