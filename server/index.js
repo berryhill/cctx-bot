@@ -105,17 +105,18 @@ async function main(app) {
         //FOR CCXT USE
         function resolveSymbol(symbol) {
             switch(symbol) {
+                // Inverse perpetuals - keep native BitMEX format
                 case 'XBTUSD':
-                    return 'BTC/USD'
+                    return 'XBTUSD'
                 case 'XRPUSD':
-                    return 'XRP/USD'
+                    return 'XRPUSD'
                 case 'ETHUSD':
-                    return 'ETH/USD'
+                    return 'ETHUSD'
                 case 'LTCUSD':
-                    return 'LTC/USD'
+                    return 'LTCUSD'
                 case 'BCHUSD':
-                    return 'BCH/USD'
-                // USDT pairs
+                    return 'BCHUSD'
+                // USDT pairs - use CCXT format with slash
                 case 'XBTUSDT':
                     return 'BTC/USDT'
                 case 'XRPUSDT':
@@ -127,7 +128,7 @@ async function main(app) {
                 case 'BMEXUSDT':
                     return 'BMEX/USDT'
                 default:
-                    return 'BTC/USD'
+                    return 'XBTUSD'
             }
         }
 
@@ -141,30 +142,30 @@ async function main(app) {
             }
 
             switch(symbol) {
-                case 'BTC/USD':
-                    // 11249 BTC/USD Minimum Price Increment	0.5 USD 
+                case 'XBTUSD':
+                    // 11249 XBTUSD Minimum Price Increment	0.5 USD
                     val = parseFloat(Math.ceil(price));
-                    console.log('BTC/USD Resolved Order Price: ',val)
+                    console.log('XBTUSD Resolved Order Price: ',val)
                     return val
-                case 'XRP/USD':
-                    // 0,2314 XRP/USD Minimum Price Increment	0.0001 USD 
+                case 'XRPUSD':
+                    // 0,2314 XRPUSD Minimum Price Increment	0.0001 USD
                     val = parseFloat(price.toFixed(4))
-                    console.log('XRP/USD Resolved Order Price: ',val)
+                    console.log('XRPUSD Resolved Order Price: ',val)
                     return val
-                case 'ETH/USD':
-                    // 1.2314,2 ETH/USD Minimum Price Increment	0.05 USD 
+                case 'ETHUSD':
+                    // 1.2314,2 ETHUSD Minimum Price Increment	0.05 USD
                     val = parseFloat(round(price,1))
-                    console.log('ETH/USD Resolved Order Price: ',val)
+                    console.log('ETHUSD Resolved Order Price: ',val)
                     return val
-                case 'LTC/USD':
-                    // 10,23 LTC/USD Minimum Price Increment 0.01 USD 
+                case 'LTCUSD':
+                    // 10,23 LTCUSD Minimum Price Increment 0.01 USD
                     val = parseFloat(round(price,2))
-                    console.log('LTC/USD Resolved Order Price: ',val)
+                    console.log('LTCUSD Resolved Order Price: ',val)
                     return val
-                case 'BCH/USD':
-                    // 301,9 ETH/USD Minimum Price Increment	0.05 USD
+                case 'BCHUSD':
+                    // 301,9 BCHUSD Minimum Price Increment	0.05 USD
                     val = parseFloat(round(price,1))
-                    console.log('BCH/USD Resolved Order Price: ',val)
+                    console.log('BCHUSD Resolved Order Price: ',val)
                     return val
                 // USDT pairs - use appropriate decimal precision
                 case 'BTC/USDT':
@@ -193,30 +194,30 @@ async function main(app) {
             let val;
             let price;
             switch(symbol){
-                case 'BTC/USD': //1 USD (Currently 0.00008778 XBT per contract)
+                case 'XBTUSD': //1 USD (Currently 0.00008778 XBT per contract)
                     price = entryPrice ? entryPrice : stream.latest.instruments['XBTUSD'].lastPrice
                     val = Math.ceil(xbtValue * price)
-                    console.log('BTC/USD resolvedContracts: ',val,'price: ',price)
+                    console.log('XBTUSD resolvedContracts: ',val,'price: ',price)
                     return val
-                case 'XRP/USD': //0.0002 XBT per 1 USD (Currently 0.00005109 XBT per contract)
+                case 'XRPUSD': //0.0002 XBT per 1 USD (Currently 0.00005109 XBT per contract)
                     price = entryPrice ? (0.0002 * entryPrice) : (0.0002 * stream.latest.instruments['XRPUSD'].lastPrice)
                     val = Math.ceil(xbtValue / price)
-                    console.log('XRP/USD resolvedContracts: ',val,'price: ',price)
+                    console.log('XRPUSD resolvedContracts: ',val,'price: ',price)
                     return val
-                case 'ETH/USD': //0.001 mXBT per 1 USD (Currently 0.00037427 XBT per contract)
+                case 'ETHUSD': //0.001 mXBT per 1 USD (Currently 0.00037427 XBT per contract)
                     price = entryPrice ? (0.000001 * entryPrice) : ( 0.000001 * stream.latest.instruments['ETHUSD'].lastPrice)
                     val = Math.ceil(xbtValue / price)
-                    console.log('ETH/USD resolvedContracts: ',val,'price: ',price)
+                    console.log('ETHUSD resolvedContracts: ',val,'price: ',price)
                     return val
-                case 'LTC/USD': //0.002 mXBT per 1 USD (Currently 0.00010027 XBT per contract)
+                case 'LTCUSD': //0.002 mXBT per 1 USD (Currently 0.00010027 XBT per contract)
                     price = entryPrice ? (0.000002 * entryPrice) : ( 0.000002 * stream.latest.instruments['LTCUSD'].lastPrice)
                     val = Math.ceil(xbtValue / price)
-                    console.log('LTC/USD resolvedContracts: ',val,'price: ',price)
+                    console.log('LTCUSD resolvedContracts: ',val,'price: ',price)
                     return val
-                case 'BCH/USD': //0.001 mXBT per 1 USD (Currently 0.00023979 XBT per contract)
+                case 'BCHUSD': //0.001 mXBT per 1 USD (Currently 0.00023979 XBT per contract)
                     price = entryPrice ? (0.000001 * entryPrice) : ( 0.000001 * stream.latest.instruments['BCHUSD'].lastPrice)
                     val = Math.ceil(xbtValue / price)
-                    console.log('BCH/USD resolvedContracts: ',val,'price: ',price)
+                    console.log('BCHUSD resolvedContracts: ',val,'price: ',price)
                     return val
                 // USDT pairs - use value directly as contracts
                 case 'BTC/USDT':
@@ -544,7 +545,7 @@ async function main(app) {
                 switch(symbol) {
                     case 'BMEX/USDT': return 1
                     case 'XRP/USDT': return 1
-                    case 'XRP/USD': return 1
+                    case 'XRPUSD': return 1
                     default: return 1
                 }
             }
@@ -900,7 +901,7 @@ async function main(app) {
                 switch(symbol) {
                     case 'BMEX/USDT': return 1000
                     case 'XRP/USDT': return 100
-                    case 'XRP/USD': return 100
+                    case 'XRPUSD': return 100
                     default: return 1
                 }
             }
