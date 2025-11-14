@@ -300,11 +300,8 @@ async function main(app) {
             switch(command) {
                 case 'B':
                 case 'S':
-                case 'BT':
-                case 'ST':
-                case 'CL':
-                case 'CS':
                 case 'CB':
+                case 'CS':
                     return 'spot'
                 case 'LF':
                 case 'SF':
@@ -320,18 +317,15 @@ async function main(app) {
         function resolveSide(command) {
             switch(command) {
                 case 'B':
-                case 'BT':
                 case 'CB':
-                case 'CL':
                     return 'B'
                 case 'S':
-                case 'ST':
                 case 'CS':
                     return 'S'
                 case 'LF':
+                case 'CLF':
                     return 'LF'
                 case 'SF':
-                case 'CLF':
                 case 'CSF':
                     return 'SF'
                 default:
@@ -699,9 +693,9 @@ async function main(app) {
                     return {code: 500, message:'Unable to process trade', input:input, e:e}
                 })
 
-            } else if (command === 'CL' || command === 'CB') {
-                // CL = Close Long (new), CB = legacy alias
-                console.log('   🔻 Executing CLOSE LONG SPOT position...')
+            } else if (command === 'CB') {
+                // CB = Close Buy (spot)
+                console.log('   🔻 Executing CLOSE BUY SPOT position...')
 
                 // 1. Get current position from open_positions (spot only)
                 const position = await Open_Positions.findOne({
@@ -711,13 +705,13 @@ async function main(app) {
                 })
 
                 if (!position) {
-                    console.log(`❌ No open position found for tag "${orderTag}"`)
-                    return {code: 404, message:'No open position found for tag', input:input}
+                    console.log(`❌ No open spot position found for tag "${orderTag}"`)
+                    return {code: 404, message:'No open spot position found for tag', input:input}
                 }
 
                 if (position.side !== 'B') {
-                    console.log(`❌ Cannot CL (close long) on short position. Position side: ${position.side}`)
-                    return {code: 400, message:'Cannot CL (close long) on short position', input:input}
+                    console.log(`❌ Cannot CB (close buy) on sell position. Position side: ${position.side}`)
+                    return {code: 400, message:'Cannot CB (close buy) on sell position', input:input}
                 }
 
                 // 2. Parse percentage and calculate contracts to close
@@ -737,7 +731,7 @@ async function main(app) {
                     const closeOrder = await trade.marketSellOrder(symbol, contractsToClose)
                     const fillPrice = closeOrder.avgPx || closeOrder.price || closeOrder.lastPx || 0
 
-                    console.log('✅ CCXT - Bitmex Close Long Order Complete: ', new Date())
+                    console.log('✅ CCXT - Bitmex Close Buy Order Complete: ', new Date())
                     console.log('   Fill price:', fillPrice)
 
                     // 4. Calculate P&L
@@ -772,7 +766,7 @@ async function main(app) {
                         tag: orderTag,
                         account: input.a,
                         symbol: input.s,
-                        side: 'S', // Sold to close longs
+                        side: 'S', // Sold to close buys
                         market_type: 'spot',
                         contracts_closed: contractsToClose,
                         close_price: fillPrice,
@@ -789,23 +783,23 @@ async function main(app) {
                     await closeTrade.save()
                     console.log('✅ Close action recorded in closed_trades')
 
-                    return {code: 200, message:'Success closing long position', input:input, pnl: pnl}
+                    return {code: 200, message:'Success closing buy position', input:input, pnl: pnl}
 
                 } catch (e) {
-                    console.log('❌ ERROR in Close Long Order:')
+                    console.log('❌ ERROR in Close Buy Order:')
                     console.log('   Error:', e)
                     inactiveList.push({
                         'username': alias,
-                        'action': 'createMarketOrder[CL]',
+                        'action': 'createMarketOrder[CB]',
                         'input': input,
                         'error': e
                     })
-                    return {code: 500, message:'Unable to close long position', input:input, e:e}
+                    return {code: 500, message:'Unable to close buy position', input:input, e:e}
                 }
 
             } else if (command === 'CS') {
-                // CS = Close Short
-                console.log('   🔺 Executing CLOSE SHORT SPOT position...')
+                // CS = Close Sell (spot)
+                console.log('   🔺 Executing CLOSE SELL SPOT position...')
 
                 // 1. Get current position from open_positions (spot only)
                 const position = await Open_Positions.findOne({
@@ -815,13 +809,13 @@ async function main(app) {
                 })
 
                 if (!position) {
-                    console.log(`❌ No open position found for tag "${orderTag}"`)
-                    return {code: 404, message:'No open position found for tag', input:input}
+                    console.log(`❌ No open spot position found for tag "${orderTag}"`)
+                    return {code: 404, message:'No open spot position found for tag', input:input}
                 }
 
                 if (position.side !== 'S') {
-                    console.log(`❌ Cannot CS (close short) on long position. Position side: ${position.side}`)
-                    return {code: 400, message:'Cannot CS (close short) on long position', input:input}
+                    console.log(`❌ Cannot CS (close sell) on buy position. Position side: ${position.side}`)
+                    return {code: 400, message:'Cannot CS (close sell) on buy position', input:input}
                 }
 
                 // 2. Parse percentage and calculate contracts to close
@@ -841,10 +835,10 @@ async function main(app) {
                     const closeOrder = await trade.marketBuyOrder(symbol, contractsToClose)
                     const fillPrice = closeOrder.avgPx || closeOrder.price || closeOrder.lastPx || 0
 
-                    console.log('✅ CCXT - Bitmex Close Short Order Complete: ', new Date())
+                    console.log('✅ CCXT - Bitmex Close Sell Order Complete: ', new Date())
                     console.log('   Fill price:', fillPrice)
 
-                    // 4. Calculate P&L (inverted for shorts)
+                    // 4. Calculate P&L (inverted for sells)
                     const pnl = (position.average_price - fillPrice) * contractsToClose
                     const pnlPercentage = (pnl / (position.average_price * contractsToClose)) * 100
 
@@ -876,7 +870,7 @@ async function main(app) {
                         tag: orderTag,
                         account: input.a,
                         symbol: input.s,
-                        side: 'B', // Bought to close shorts
+                        side: 'B', // Bought to close sells
                         market_type: 'spot',
                         contracts_closed: contractsToClose,
                         close_price: fillPrice,
@@ -893,10 +887,10 @@ async function main(app) {
                     await closeTrade.save()
                     console.log('✅ Close action recorded in closed_trades')
 
-                    return {code: 200, message:'Success closing short position', input:input, pnl: pnl}
+                    return {code: 200, message:'Success closing sell position', input:input, pnl: pnl}
 
                 } catch (e) {
-                    console.log('❌ ERROR in Close Short Order:')
+                    console.log('❌ ERROR in Close Sell Order:')
                     console.log('   Error:', e)
                     inactiveList.push({
                         'username': alias,
@@ -904,7 +898,7 @@ async function main(app) {
                         'input': input,
                         'error': e
                     })
-                    return {code: 500, message:'Unable to close short position', input:input, e:e}
+                    return {code: 500, message:'Unable to close sell position', input:input, e:e}
                 }
 
             } else if (command === 'CLF') {
@@ -1775,18 +1769,13 @@ async function main(app) {
                             return createMarketTriggerOrderP(symbol,input)
                         }
 
-                    case 'CL':
-                        //Market Close Long
-                        //Q=percentage (e.g., "50%")
-                        mainLog.print(`Trade:${alias}`,"M-CL")
-                        return createMarketOrder(symbol, input)
                     case 'CB':
-                        //Market Close Buys (legacy alias for CL)
+                        //Market Close Buy (spot)
                         //Q=percentage (e.g., "50%")
-                        mainLog.print(`Trade:${alias}`,"M-CB (legacy)")
+                        mainLog.print(`Trade:${alias}`,"M-CB")
                         return createMarketOrder(symbol, input)
                     case 'CS':
-                        //Market Close Short
+                        //Market Close Sell (spot)
                         //Q=percentage (e.g., "50%")
                         mainLog.print(`Trade:${alias}`,"M-CS")
                         return createMarketOrder(symbol, input)
