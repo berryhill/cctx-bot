@@ -1165,6 +1165,48 @@ async function main(app) {
                     return {code: 500, message:'Unable to close short futures position', input:input, e:e}
                 }
 
+            } else if (command === 'LF') {
+                // LF = Long Futures (market buy)
+                console.log('   📈 Executing LONG FUTURES Market Order...')
+                trade.marketBuyOrder(symbol,qntyUSD).then(function (data) {
+                    console.log('   ✅ CCXT - Bitmex Long Futures Order Complete: ', new Date)
+                    console.log('   Order Data:', JSON.stringify(data, null, 2))
+                    pushTagTrades(orderTag,data,input)
+                    return {code: 200, message:'Success to process Long Futures Market Order', input:input}
+                }).catch(e => {
+                    console.log('   ❌ ERROR in Long Futures Market Order:')
+                    console.log('   Error:', e)
+                    inactiveList.push({
+                        'username': alias,
+                        'action': 'createMarketOrder[LF]',
+                        'input': input,
+                        'error':e
+                    })
+                    console.log("   Failed to submit Long Futures Market Order: ",e)
+                    return {code: 500, message:'Unable to process long futures trade', input:input, e:e}
+                })
+
+            } else if (command === 'SF') {
+                // SF = Short Futures (market sell)
+                console.log('   📉 Executing SHORT FUTURES Market Order...')
+                trade.marketSellOrder(symbol,qntyUSD).then(function (data) {
+                    console.log('   ✅ CCXT - Bitmex Short Futures Order Complete: ', new Date)
+                    console.log('   Order Data:', JSON.stringify(data, null, 2))
+                    pushTagTrades(orderTag,data,input)
+                    return {code: 200, message:'Success to process Short Futures Market Order', input:input}
+                }).catch(e => {
+                    console.log('   ❌ ERROR in Short Futures Market Order:')
+                    console.log('   Error:', e)
+                    inactiveList.push({
+                        'username': alias,
+                        'action': 'createMarketOrder[SF]',
+                        'input': input,
+                        'error':e
+                    })
+                    console.log("   Failed to submit Short Futures Market Order: ",e)
+                    return {code: 500, message:'Unable to process short futures trade', input:input, e:e}
+                })
+
             } else {
                 inactiveList.push({
                     'username': alias,
