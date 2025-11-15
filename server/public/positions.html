@@ -115,11 +115,16 @@
 
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
+            console.log('WebSocket data received:', data);
 
             // Handle both old format (array) and new format (object with positions + balances)
             if (Array.isArray(data)) {
+                console.log('Received old format (array)');
                 renderPositions(data);
             } else {
+                console.log('Received new format (object)');
+                console.log('Positions:', data.positions);
+                console.log('Balances:', data.balances);
                 renderPositions(data.positions || []);
                 renderBalances(data.balances || {});
             }

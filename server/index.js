@@ -3679,7 +3679,10 @@ async function main(app) {
 
             // Collect account balances from streamPrivate
             const balances = {}
+            positionsLog.print('Debug', `streamPrivate.latest.margin exists: ${!!streamPrivate.latest.margin}`)
             if (streamPrivate.latest.margin) {
+                const usernames = Object.keys(streamPrivate.latest.margin)
+                positionsLog.print('Debug', `Found ${usernames.length} users in margin data: ${usernames.join(', ')}`)
                 Object.keys(streamPrivate.latest.margin).forEach(username => {
                     const marginData = streamPrivate.latest.margin[username]
                     if (marginData && marginData[0]) {
@@ -3688,9 +3691,11 @@ async function main(app) {
                             marginBalance: marginData[0].marginBalance ? marginData[0].marginBalance / 100000000 : 0,
                             availableMargin: marginData[0].availableMargin ? marginData[0].availableMargin / 100000000 : 0
                         }
+                        positionsLog.print('Debug', `Added balance for ${username}: ${JSON.stringify(balances[username])}`)
                     }
                 })
             }
+            positionsLog.print('Debug', `Total balances collected: ${Object.keys(balances).length}`)
 
             const message = JSON.stringify({
                 positions: positions,
