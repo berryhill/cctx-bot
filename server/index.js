@@ -323,13 +323,21 @@ async function main(app) {
                 console.log('   Rounded to lot size:', contracts)
 
                 // If rounded value is below minimum, use minimum (lot size)
+                let actualDollarAmount = usdAmount
                 if (contracts < lotSize) {
                     contracts = lotSize
-                    console.log(`   ⚠️  Order below minimum ($${minTradeAmount} USD), using minimum: ${contracts} contracts`)
+                    actualDollarAmount = minTradeAmount
+                    console.log(`   ⚠️  Order below minimum ($${minTradeAmount.toFixed(2)} USD), using minimum: ${contracts} contracts`)
+                    console.log(`   📊 Actual dollar amount adjusted to: $${actualDollarAmount.toFixed(2)}`)
                 }
 
                 console.log('   ✅ Final contracts:', contracts)
-                return contracts
+                console.log('   ✅ Final dollar amount:', actualDollarAmount)
+
+                return {
+                    contracts: contracts,
+                    actualDollarAmount: actualDollarAmount
+                }
 
             } catch (error) {
                 console.error('   ❌ Error converting USD to contracts:', error.message)
@@ -786,15 +794,16 @@ async function main(app) {
             console.log("   Is Futures Command:", isFuturesCommand)
 
             let qntyUSD
-            let dollarAmount = null // Track original USD amount for futures
+            let dollarAmount = null // Track actual USD amount for futures (adjusted if below minimum)
 
             if (isFuturesCommand) {
                 // For futures commands, qntyValue represents USD amount to trade
                 // Convert USD to contract count
                 console.log("   🔄 Converting futures USD to contracts...")
-                dollarAmount = qntyValue // Store original USD amount
-                qntyUSD = await convertFuturesUSDToContracts(qntyValue, symbol, trade)
-                console.log(`   ✅ Futures conversion: $${qntyValue} USD → ${qntyUSD} contracts`)
+                const conversion = await convertFuturesUSDToContracts(qntyValue, symbol, trade)
+                qntyUSD = conversion.contracts
+                dollarAmount = conversion.actualDollarAmount // Use actual amount (may be higher if below minimum)
+                console.log(`   ✅ Futures conversion: $${qntyValue} USD → ${qntyUSD} contracts (actual: $${dollarAmount.toFixed(2)})`)
             } else if (isUSDTPair && isUSDTAmount) {
                 // For USDT pairs with USDT amount: convert USDT to contracts
                 // Get current price: USDT amount / price = contracts
