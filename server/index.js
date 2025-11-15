@@ -318,21 +318,29 @@ async function main(app) {
                     throw new Error(`Unable to determine contract type for ${symbol}`)
                 }
 
-                // Round to lot size
-                contracts = Math.floor(contracts / lotSize) * lotSize
-                console.log('   Rounded to lot size:', contracts)
+                // Round UP to next lot size
+                contracts = Math.ceil(contracts / lotSize) * lotSize
+                console.log('   Rounded UP to lot size:', contracts)
 
-                // If rounded value is below minimum, use minimum (lot size)
-                let actualDollarAmount = usdAmount
-                if (contracts < lotSize) {
-                    contracts = lotSize
-                    actualDollarAmount = minTradeAmount
-                    console.log(`   ⚠️  Order below minimum ($${minTradeAmount.toFixed(2)} USD), using minimum: ${contracts} contracts`)
-                    console.log(`   📊 Actual dollar amount adjusted to: $${actualDollarAmount.toFixed(2)}`)
+                // Calculate actual dollar amount based on rounded contracts
+                let actualDollarAmount
+                if (info.underlyingToPositionMultiplier) {
+                    // LINEAR: need to recalculate with current price
+                    const ticker = await trade.ticker(symbol)
+                    const currentPrice = ticker.last
+                    const contractSize = 1 / info.underlyingToPositionMultiplier
+                    actualDollarAmount = contracts * contractSize * currentPrice
+                } else if (info.underlyingToSettleMultiplier && info.multiplier) {
+                    // INVERSE
+                    const contractSize = info.multiplier / info.underlyingToSettleMultiplier
+                    actualDollarAmount = contracts * contractSize
+                } else if (info.multiplier && info.settlCurrency) {
+                    // QUANTO
+                    actualDollarAmount = contracts * info.multiplier
                 }
 
                 console.log('   ✅ Final contracts:', contracts)
-                console.log('   ✅ Final dollar amount:', actualDollarAmount)
+                console.log('   ✅ Actual dollar amount (rounded up):', actualDollarAmount.toFixed(2))
 
                 return {
                     contracts: contracts,
