@@ -734,7 +734,10 @@ async function main(app) {
 
             // Check if this is a futures command
             const isFuturesCommand = ['LF', 'SF', 'CLF', 'CSF', 'FLF', 'FSF'].includes(command)
-            const isFuturesSymbol = ['XBTUSD', 'ETHUSD', 'XRPUSD', 'LTCUSD', 'BCHUSD'].includes(symbol)
+            const isFuturesSymbol = [
+                'XBTUSD', 'ETHUSD', 'XRPUSD', 'LTCUSD', 'BCHUSD',  // Inverse perpetuals
+                'XRP/USDT:USDT', 'BTC/USDT:USDT', 'ETH/USDT:USDT', 'SOL/USDT:USDT'  // Linear USDT perpetuals
+            ].includes(symbol)
 
             console.log("   Is Futures Command:", isFuturesCommand)
             console.log("   Is Futures Symbol:", isFuturesSymbol)
