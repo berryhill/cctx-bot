@@ -260,13 +260,31 @@ async function main(app) {
                 let minTradeAmount
 
                 // Check contract type based on available fields
+                let contracts
+
                 if (info.underlyingToPositionMultiplier) {
                     // LINEAR CONTRACT (USDT perpetuals like XRP/USDT:USDT)
-                    // Contract Size = 1 / underlyingToPositionMultiplier
+                    // For linear: need current price to convert USD to contracts
+                    // Contract Size = 1 / underlyingToPositionMultiplier (underlying asset per contract)
+                    // Contracts = USD Amount / (Contract Size × Current Price)
+
+                    const ticker = await trade.ticker(symbol)
+                    const currentPrice = ticker.last
+
                     contractSize = 1 / info.underlyingToPositionMultiplier
-                    minTradeAmount = contractSize * lotSize
+                    const usdPerContract = contractSize * currentPrice
+                    minTradeAmount = usdPerContract * lotSize
+
                     console.log('   Contract Type: LINEAR')
                     console.log('   underlyingToPositionMultiplier:', info.underlyingToPositionMultiplier)
+                    console.log('   Contract Size (underlying per contract):', contractSize)
+                    console.log('   Current Price:', currentPrice)
+                    console.log('   USD per contract:', usdPerContract)
+                    console.log('   Minimum Trade Amount:', minTradeAmount)
+
+                    contracts = Math.floor(usdAmount / usdPerContract)
+                    console.log('   Raw contracts (before rounding):', contracts)
+
                 } else if (info.underlyingToSettleMultiplier && info.multiplier) {
                     // INVERSE CONTRACT (USD perpetuals like XBTUSD)
                     // Contract Size = Multiplier / underlyingToSettleMultiplier
@@ -275,25 +293,30 @@ async function main(app) {
                     console.log('   Contract Type: INVERSE')
                     console.log('   multiplier:', info.multiplier)
                     console.log('   underlyingToSettleMultiplier:', info.underlyingToSettleMultiplier)
+                    console.log('   Contract Size (USD per contract):', contractSize)
+                    console.log('   Minimum Trade Amount:', minTradeAmount)
+
+                    contracts = Math.floor(usdAmount / contractSize)
+                    console.log('   Raw contracts (before rounding):', contracts)
+
                 } else if (info.multiplier && info.settlCurrency) {
                     // QUANTO CONTRACT
                     // Contract Size = multiplier (in settlCurrency)
                     // Minimum Trade Amount = lotSize (directly)
                     contractSize = info.multiplier
-                    minTradeAmount = lotSize  // For quanto, minimum is just lotSize
+                    minTradeAmount = lotSize
                     console.log('   Contract Type: QUANTO')
                     console.log('   multiplier:', info.multiplier)
                     console.log('   settlCurrency:', info.settlCurrency)
+                    console.log('   Contract Size:', contractSize)
+                    console.log('   Minimum Trade Amount:', minTradeAmount)
+
+                    contracts = Math.floor(usdAmount / contractSize)
+                    console.log('   Raw contracts (before rounding):', contracts)
+
                 } else {
                     throw new Error(`Unable to determine contract type for ${symbol}`)
                 }
-
-                console.log('   Contract Size:', contractSize)
-                console.log('   Minimum Trade Amount:', minTradeAmount)
-
-                // Calculate number of contracts for USD amount
-                let contracts = Math.floor(usdAmount / contractSize)
-                console.log('   Raw contracts (before rounding):', contracts)
 
                 // Round to lot size
                 contracts = Math.floor(contracts / lotSize) * lotSize
