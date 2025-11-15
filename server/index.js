@@ -759,18 +759,13 @@ async function main(app) {
 
             // Check if this is a futures command
             const isFuturesCommand = ['LF', 'SF', 'CLF', 'CSF', 'FLF', 'FSF'].includes(command)
-            const isFuturesSymbol = [
-                'XBTUSD', 'ETHUSD', 'XRPUSD', 'LTCUSD', 'BCHUSD',  // Inverse perpetuals
-                'XRP/USDT:USDT', 'BTC/USDT:USDT', 'ETH/USDT:USDT', 'SOL/USDT:USDT'  // Linear USDT perpetuals
-            ].includes(symbol)
 
             console.log("   Is Futures Command:", isFuturesCommand)
-            console.log("   Is Futures Symbol:", isFuturesSymbol)
 
             let qntyUSD
             let dollarAmount = null // Track original USD amount for futures
 
-            if (isFuturesCommand && isFuturesSymbol) {
+            if (isFuturesCommand) {
                 // For futures commands, qntyValue represents USD amount to trade
                 // Convert USD to contract count
                 console.log("   🔄 Converting futures USD to contracts...")
