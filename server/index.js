@@ -270,14 +270,14 @@ async function main(app) {
                 let contracts = Math.floor(usdAmount / contractSize)
                 console.log('   Raw contracts (before rounding):', contracts)
 
-                // If below minimum, trade the minimum
-                if (usdAmount < minTradeAmount) {
+                // Round to lot size
+                contracts = Math.floor(contracts / lotSize) * lotSize
+                console.log('   Rounded to lot size:', contracts)
+
+                // If rounded value is below minimum, use minimum (lot size)
+                if (contracts < lotSize) {
                     contracts = lotSize
                     console.log(`   ⚠️  Order below minimum ($${minTradeAmount} USD), using minimum: ${contracts} contracts`)
-                } else {
-                    // Round to lot size
-                    contracts = Math.floor(contracts / lotSize) * lotSize
-                    console.log('   Rounded to lot size:', contracts)
                 }
 
                 console.log('   ✅ Final contracts:', contracts)
