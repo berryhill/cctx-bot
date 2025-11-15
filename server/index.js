@@ -1923,12 +1923,11 @@ async function main(app) {
 
                     console.log(`   P&L from closed portion: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
 
-                    // 4. Get old dollar amount and set new one
+                    // 4. Get old dollar amount to record in closed trade
                     const oldDollarAmount = position.dollar_amount || null
-                    console.log(`   Old position dollar amount: ${oldDollarAmount}`)
-                    console.log(`   New position dollar amount: ${dollarAmount}`)
+                    console.log(`   Position dollar amount (preserved): ${oldDollarAmount}`)
 
-                    // 5. Update position to new side
+                    // 5. Update position to new side (dollar_amount stays unchanged)
                     const updateFields = {
                         side: newSide,
                         total_contracts: currentContracts,
@@ -1936,9 +1935,6 @@ async function main(app) {
                         trade_count: 1,
                         trade_ids: [flipOrder.orderID || flipOrder.id || flipOrder.clOrdID],
                         last_updated: new Date()
-                    }
-                    if (dollarAmount !== null) {
-                        updateFields.dollar_amount = dollarAmount // Use new dollar amount for flipped position
                     }
 
                     await Positions_Open.updateOne(
@@ -2032,12 +2028,11 @@ async function main(app) {
 
                     console.log(`   P&L from closed portion: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
 
-                    // 4. Get old dollar amount and set new one
+                    // 4. Get old dollar amount to record in closed trade
                     const oldDollarAmount = position.dollar_amount || null
-                    console.log(`   Old position dollar amount: ${oldDollarAmount}`)
-                    console.log(`   New position dollar amount: ${dollarAmount}`)
+                    console.log(`   Position dollar amount (preserved): ${oldDollarAmount}`)
 
-                    // 5. Update position to new side
+                    // 5. Update position to new side (dollar_amount stays unchanged)
                     const updateFields = {
                         side: newSide,
                         total_contracts: currentContracts,
@@ -2045,9 +2040,6 @@ async function main(app) {
                         trade_count: 1,
                         trade_ids: [flipOrder.orderID || flipOrder.id || flipOrder.clOrdID],
                         last_updated: new Date()
-                    }
-                    if (dollarAmount !== null) {
-                        updateFields.dollar_amount = dollarAmount // Use new dollar amount for flipped position
                     }
 
                     await Positions_Open.updateOne(
