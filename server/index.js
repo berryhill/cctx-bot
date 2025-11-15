@@ -3659,7 +3659,26 @@ async function main(app) {
 
         try {
             const positions = await Positions_Open.find({}).sort({ last_updated: -1 }).lean()
-            const message = JSON.stringify(positions)
+
+            // Collect account balances from streamPrivate
+            const balances = {}
+            if (streamPrivate.latest.margin) {
+                Object.keys(streamPrivate.latest.margin).forEach(username => {
+                    const marginData = streamPrivate.latest.margin[username]
+                    if (marginData && marginData[0]) {
+                        balances[username] = {
+                            walletBalance: marginData[0].walletBalance ? marginData[0].walletBalance / 100000000 : 0,
+                            marginBalance: marginData[0].marginBalance ? marginData[0].marginBalance / 100000000 : 0,
+                            availableMargin: marginData[0].availableMargin ? marginData[0].availableMargin / 100000000 : 0
+                        }
+                    }
+                })
+            }
+
+            const message = JSON.stringify({
+                positions: positions,
+                balances: balances
+            })
 
             wss.clients.forEach(client => {
                 if (client.readyState === WebSocket.OPEN) {
@@ -3675,10 +3694,29 @@ async function main(app) {
     wss.on('connection', async (ws) => {
         positionsLog.print('Connect', `Client connected (total: ${wss.clients.size})`)
 
-        // Send initial positions
+        // Send initial positions and balances
         try {
             const positions = await Positions_Open.find({}).sort({ last_updated: -1 }).lean()
-            ws.send(JSON.stringify(positions))
+
+            // Collect account balances
+            const balances = {}
+            if (streamPrivate.latest.margin) {
+                Object.keys(streamPrivate.latest.margin).forEach(username => {
+                    const marginData = streamPrivate.latest.margin[username]
+                    if (marginData && marginData[0]) {
+                        balances[username] = {
+                            walletBalance: marginData[0].walletBalance ? marginData[0].walletBalance / 100000000 : 0,
+                            marginBalance: marginData[0].marginBalance ? marginData[0].marginBalance / 100000000 : 0,
+                            availableMargin: marginData[0].availableMargin ? marginData[0].availableMargin / 100000000 : 0
+                        }
+                    }
+                })
+            }
+
+            ws.send(JSON.stringify({
+                positions: positions,
+                balances: balances
+            }))
         } catch (e) {
             positionsLog.print('Error', `Failed to send initial data: ${e.message}`)
         }

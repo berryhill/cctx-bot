@@ -73,6 +73,8 @@
     <h1>📊 Open Positions</h1>
     <div class="status disconnected" id="status">⚫ Disconnected</div>
 
+    <div id="balances-container" style="margin-bottom: 20px;"></div>
+
     <table id="positions-table">
         <thead>
             <tr>
@@ -112,9 +114,40 @@
         };
 
         ws.onmessage = (event) => {
-            const positions = JSON.parse(event.data);
-            renderPositions(positions);
+            const data = JSON.parse(event.data);
+
+            // Handle both old format (array) and new format (object with positions + balances)
+            if (Array.isArray(data)) {
+                renderPositions(data);
+            } else {
+                renderPositions(data.positions || []);
+                renderBalances(data.balances || {});
+            }
         };
+
+        function renderBalances(balances) {
+            const container = document.getElementById('balances-container');
+
+            if (Object.keys(balances).length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            const balanceCards = Object.entries(balances).map(([username, balance]) => {
+                return `
+                    <div style="display: inline-block; background: #0a0a0a; border: 1px solid #333; padding: 15px; margin: 5px; border-radius: 5px;">
+                        <div style="color: #00ffff; font-weight: bold; margin-bottom: 8px;">${username}</div>
+                        <div style="font-size: 12px;">
+                            <div style="margin: 3px 0;">Wallet: <span style="color: #00ff00;">${balance.walletBalance.toFixed(8)} BTC</span></div>
+                            <div style="margin: 3px 0;">Margin: <span style="color: #ffaa00;">${balance.marginBalance.toFixed(8)} BTC</span></div>
+                            <div style="margin: 3px 0;">Available: <span style="color: #00aaff;">${balance.availableMargin.toFixed(8)} BTC</span></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = balanceCards;
+        }
 
         function renderPositions(positions) {
             if (positions.length === 0) {
