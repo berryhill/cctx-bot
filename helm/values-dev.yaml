@@ -1,9 +1,9 @@
-replicaCount: 1
+replicaCount: 3
 
 image:
   repository: ghcr.io/berryhill/ccxt-bot-server
   pullPolicy: Always
-  tag: "0.0.51"
+  tag: "0.0.52"
 
 imagePullSecrets:
   - name: ghcr-secret
