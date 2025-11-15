@@ -10,7 +10,8 @@ const userSchema = new Schema({
     telegram: { type: Object, require: false},
     api: { type: Object, required: false },
     phone: { type: String, required: false },
-    config: { type: Object, required: false }
+    config: { type: Object, required: false },
+    exchange: { type: String, enum: ['bitmex', 'hyperliquid'], required: false, default: 'bitmex' }
 })
 
 const triggerOrdersSchema = new Schema({
