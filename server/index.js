@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const mongoose = require('mongoose');
 const MongoDB = require('./database/MongoDB');
-const { User, Trigger_Orders, TO_Processed, Open_Trades, Open_Positions, Closed_Trades } = require('./database/MongoDB');
+const { User, Trigger_Orders, TO_Processed, Trades_Opened, Positions_Open, Trades_Closed } = require('./database/MongoDB');
 const postSchema = require('./validation/postSchema');
 const CreateCCXT = require('./CreateCCXT');
 const BitmexStream = require('./wss/wss_stream');
@@ -40,7 +40,7 @@ const procOrdVerbose = false
 //Global Variables
 const users = {}
 const inactiveList = []
-// tagTrades migrated to MongoDB Open_Trades collection
+// tagTrades migrated to MongoDB Trades_Opened collection
 let tpOrders = []
 
 //Return JSON-response from server (Mainly to Tradingview which POSTS to the Webhook.)
@@ -436,7 +436,7 @@ async function main(app) {
             console.log('   ✅ Extracted - orderId:', orderId, 'price:', price, 'contracts:', contracts, 'num_contracts:', numContracts)
 
             // Save trade to database
-            const newTrade = new Open_Trades({
+            const newTrade = new Trades_Opened({
                 tag: tag,
                 account: input.a,
                 symbol: input.s,
@@ -463,7 +463,7 @@ async function main(app) {
 
                 // Update or create position in open_positions
                 console.log('📊 Updating open_positions...')
-                const existingPosition = await Open_Positions.findOne({
+                const existingPosition = await Positions_Open.findOne({
                     tag: tag,
                     account: input.a,
                     market_type: marketType
@@ -488,7 +488,7 @@ async function main(app) {
                     console.log(`   Adding: ${numContracts} @ ${price}`)
                     console.log(`   New: ${newTotalContracts} @ ${newAvgPrice.toFixed(4)}`)
 
-                    await Open_Positions.updateOne(
+                    await Positions_Open.updateOne(
                         { tag: tag, account: input.a, market_type: marketType },
                         {
                             $set: {
@@ -504,7 +504,7 @@ async function main(app) {
                 } else {
                     // Create new position using num_contracts
                     console.log(`   No existing ${marketType} position - creating new`)
-                    const newPosition = new Open_Positions({
+                    const newPosition = new Positions_Open({
                         tag: tag,
                         account: input.a,
                         symbol: input.s,
@@ -757,7 +757,7 @@ async function main(app) {
                 console.log('   🔻 Executing CLOSE BUY SPOT position...')
 
                 // 1. Get current position from open_positions (spot only)
-                const position = await Open_Positions.findOne({
+                const position = await Positions_Open.findOne({
                     tag: orderTag,
                     account: input.a,
                     market_type: 'spot'
@@ -804,11 +804,11 @@ async function main(app) {
 
                     if (remainingContracts === 0 || percentage >= 100) {
                         // Full close - delete position
-                        await Open_Positions.deleteOne({ tag: orderTag, account: input.a, market_type: 'spot' })
+                        await Positions_Open.deleteOne({ tag: orderTag, account: input.a, market_type: 'spot' })
                         console.log('✅ Position fully closed - removed from open_positions')
                     } else {
                         // Partial close - update position
-                        await Open_Positions.updateOne(
+                        await Positions_Open.updateOne(
                             { tag: orderTag, account: input.a, market_type: 'spot' },
                             {
                                 $set: {
@@ -821,7 +821,7 @@ async function main(app) {
                     }
 
                     // 6. Record close action in closed_trades
-                    const closeTrade = new Closed_Trades({
+                    const closeTrade = new Trades_Closed({
                         tag: orderTag,
                         account: input.a,
                         symbol: input.s,
@@ -861,7 +861,7 @@ async function main(app) {
                 console.log('   🔺 Executing CLOSE SELL SPOT position...')
 
                 // 1. Get current position from open_positions (spot only)
-                const position = await Open_Positions.findOne({
+                const position = await Positions_Open.findOne({
                     tag: orderTag,
                     account: input.a,
                     market_type: 'spot'
@@ -908,11 +908,11 @@ async function main(app) {
 
                     if (remainingContracts === 0 || percentage >= 100) {
                         // Full close - delete position
-                        await Open_Positions.deleteOne({ tag: orderTag, account: input.a, market_type: 'spot' })
+                        await Positions_Open.deleteOne({ tag: orderTag, account: input.a, market_type: 'spot' })
                         console.log('✅ Position fully closed - removed from open_positions')
                     } else {
                         // Partial close - update position
-                        await Open_Positions.updateOne(
+                        await Positions_Open.updateOne(
                             { tag: orderTag, account: input.a, market_type: 'spot' },
                             {
                                 $set: {
@@ -925,7 +925,7 @@ async function main(app) {
                     }
 
                     // 6. Record close action in closed_trades
-                    const closeTrade = new Closed_Trades({
+                    const closeTrade = new Trades_Closed({
                         tag: orderTag,
                         account: input.a,
                         symbol: input.s,
@@ -965,7 +965,7 @@ async function main(app) {
                 console.log('   🔻 Executing CLOSE LONG FUTURES position...')
 
                 // 1. Get current position from open_positions (futures only)
-                const position = await Open_Positions.findOne({
+                const position = await Positions_Open.findOne({
                     tag: orderTag,
                     account: input.a,
                     market_type: 'futures'
@@ -1012,11 +1012,11 @@ async function main(app) {
 
                     if (remainingContracts === 0 || percentage >= 100) {
                         // Full close - delete position
-                        await Open_Positions.deleteOne({ tag: orderTag, account: input.a, market_type: 'futures' })
+                        await Positions_Open.deleteOne({ tag: orderTag, account: input.a, market_type: 'futures' })
                         console.log('✅ Position fully closed - removed from open_positions')
                     } else {
                         // Partial close - update position
-                        await Open_Positions.updateOne(
+                        await Positions_Open.updateOne(
                             { tag: orderTag, account: input.a, market_type: 'futures' },
                             {
                                 $set: {
@@ -1029,7 +1029,7 @@ async function main(app) {
                     }
 
                     // 6. Record close action in closed_trades
-                    const closeTrade = new Closed_Trades({
+                    const closeTrade = new Trades_Closed({
                         tag: orderTag,
                         account: input.a,
                         symbol: input.s,
@@ -1069,7 +1069,7 @@ async function main(app) {
                 console.log('   🔺 Executing CLOSE SHORT FUTURES position...')
 
                 // 1. Get current position from open_positions (futures only)
-                const position = await Open_Positions.findOne({
+                const position = await Positions_Open.findOne({
                     tag: orderTag,
                     account: input.a,
                     market_type: 'futures'
@@ -1116,11 +1116,11 @@ async function main(app) {
 
                     if (remainingContracts === 0 || percentage >= 100) {
                         // Full close - delete position
-                        await Open_Positions.deleteOne({ tag: orderTag, account: input.a, market_type: 'futures' })
+                        await Positions_Open.deleteOne({ tag: orderTag, account: input.a, market_type: 'futures' })
                         console.log('✅ Position fully closed - removed from open_positions')
                     } else {
                         // Partial close - update position
-                        await Open_Positions.updateOne(
+                        await Positions_Open.updateOne(
                             { tag: orderTag, account: input.a, market_type: 'futures' },
                             {
                                 $set: {
@@ -1133,7 +1133,7 @@ async function main(app) {
                     }
 
                     // 6. Record close action in closed_trades
-                    const closeTrade = new Closed_Trades({
+                    const closeTrade = new Trades_Closed({
                         tag: orderTag,
                         account: input.a,
                         symbol: input.s,
@@ -1173,7 +1173,7 @@ async function main(app) {
                 // Check for opposing SF position first
                 console.log('   📈 Processing LONG FUTURES command...')
 
-                const position = await Open_Positions.findOne({
+                const position = await Positions_Open.findOne({
                     tag: orderTag,
                     account: input.a,
                     market_type: 'futures'
@@ -1205,7 +1205,7 @@ async function main(app) {
                             console.log(`   P&L: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
 
                             // Update position with reduced contracts
-                            await Open_Positions.updateOne(
+                            await Positions_Open.updateOne(
                                 { tag: orderTag, account: input.a, market_type: 'futures' },
                                 {
                                     $set: {
@@ -1216,7 +1216,7 @@ async function main(app) {
                             )
 
                             // Record partial close
-                            const closeTrade = new Closed_Trades({
+                            const closeTrade = new Trades_Closed({
                                 tag: orderTag,
                                 account: input.a,
                                 symbol: input.s,
@@ -1249,10 +1249,10 @@ async function main(app) {
                             console.log(`   P&L: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
 
                             // Delete position
-                            await Open_Positions.deleteOne({ tag: orderTag, account: input.a, market_type: 'futures' })
+                            await Positions_Open.deleteOne({ tag: orderTag, account: input.a, market_type: 'futures' })
 
                             // Record full close
-                            const closeTrade = new Closed_Trades({
+                            const closeTrade = new Trades_Closed({
                                 tag: orderTag,
                                 account: input.a,
                                 symbol: input.s,
@@ -1286,7 +1286,7 @@ async function main(app) {
                             console.log(`   P&L from close: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
 
                             // Update position to LF with remainder
-                            await Open_Positions.updateOne(
+                            await Positions_Open.updateOne(
                                 { tag: orderTag, account: input.a, market_type: 'futures' },
                                 {
                                     $set: {
@@ -1301,7 +1301,7 @@ async function main(app) {
                             )
 
                             // Record close of SF position
-                            const closeTrade = new Closed_Trades({
+                            const closeTrade = new Trades_Closed({
                                 tag: orderTag,
                                 account: input.a,
                                 symbol: input.s,
@@ -1364,7 +1364,7 @@ async function main(app) {
                 // Check for opposing LF position first
                 console.log('   📉 Processing SHORT FUTURES command...')
 
-                const position = await Open_Positions.findOne({
+                const position = await Positions_Open.findOne({
                     tag: orderTag,
                     account: input.a,
                     market_type: 'futures'
@@ -1396,7 +1396,7 @@ async function main(app) {
                             console.log(`   P&L: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
 
                             // Update position with reduced contracts
-                            await Open_Positions.updateOne(
+                            await Positions_Open.updateOne(
                                 { tag: orderTag, account: input.a, market_type: 'futures' },
                                 {
                                     $set: {
@@ -1407,7 +1407,7 @@ async function main(app) {
                             )
 
                             // Record partial close
-                            const closeTrade = new Closed_Trades({
+                            const closeTrade = new Trades_Closed({
                                 tag: orderTag,
                                 account: input.a,
                                 symbol: input.s,
@@ -1440,10 +1440,10 @@ async function main(app) {
                             console.log(`   P&L: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
 
                             // Delete position
-                            await Open_Positions.deleteOne({ tag: orderTag, account: input.a, market_type: 'futures' })
+                            await Positions_Open.deleteOne({ tag: orderTag, account: input.a, market_type: 'futures' })
 
                             // Record full close
-                            const closeTrade = new Closed_Trades({
+                            const closeTrade = new Trades_Closed({
                                 tag: orderTag,
                                 account: input.a,
                                 symbol: input.s,
@@ -1477,7 +1477,7 @@ async function main(app) {
                             console.log(`   P&L from close: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
 
                             // Update position to SF with remainder
-                            await Open_Positions.updateOne(
+                            await Positions_Open.updateOne(
                                 { tag: orderTag, account: input.a, market_type: 'futures' },
                                 {
                                     $set: {
@@ -1492,7 +1492,7 @@ async function main(app) {
                             )
 
                             // Record close of LF position
-                            const closeTrade = new Closed_Trades({
+                            const closeTrade = new Trades_Closed({
                                 tag: orderTag,
                                 account: input.a,
                                 symbol: input.s,
@@ -1555,7 +1555,7 @@ async function main(app) {
                 console.log('   🔄 Executing FLIP LONG to SHORT...')
 
                 // 1. Get current position from open_positions (futures only)
-                const position = await Open_Positions.findOne({
+                const position = await Positions_Open.findOne({
                     tag: orderTag,
                     account: input.a,
                     market_type: 'futures'
@@ -1599,7 +1599,7 @@ async function main(app) {
                     console.log(`   P&L from closed portion: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
 
                     // 4. Update position to new side
-                    await Open_Positions.updateOne(
+                    await Positions_Open.updateOne(
                         { tag: orderTag, account: input.a, market_type: 'futures' },
                         {
                             $set: {
@@ -1615,7 +1615,7 @@ async function main(app) {
                     console.log(`✅ Position flipped: ${currentSide} → ${newSide} (${currentContracts} contracts @ ${fillPrice})`)
 
                     // 5. Record close action for closed portion in closed_trades
-                    const closeTrade = new Closed_Trades({
+                    const closeTrade = new Trades_Closed({
                         tag: orderTag,
                         account: input.a,
                         symbol: input.s,
@@ -1655,7 +1655,7 @@ async function main(app) {
                 console.log('   🔄 Executing FLIP SHORT to LONG...')
 
                 // 1. Get current position from open_positions (futures only)
-                const position = await Open_Positions.findOne({
+                const position = await Positions_Open.findOne({
                     tag: orderTag,
                     account: input.a,
                     market_type: 'futures'
@@ -1699,7 +1699,7 @@ async function main(app) {
                     console.log(`   P&L from closed portion: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
 
                     // 4. Update position to new side
-                    await Open_Positions.updateOne(
+                    await Positions_Open.updateOne(
                         { tag: orderTag, account: input.a, market_type: 'futures' },
                         {
                             $set: {
@@ -1715,7 +1715,7 @@ async function main(app) {
                     console.log(`✅ Position flipped: ${currentSide} → ${newSide} (${currentContracts} contracts @ ${fillPrice})`)
 
                     // 5. Record close action for closed portion in closed_trades
-                    const closeTrade = new Closed_Trades({
+                    const closeTrade = new Trades_Closed({
                         tag: orderTag,
                         account: input.a,
                         symbol: input.s,
@@ -2322,7 +2322,7 @@ async function main(app) {
             const sideCode = side === 'sell' ? 'S' : 'B'
 
             try {
-                const result = await Open_Trades.deleteMany({
+                const result = await Trades_Opened.deleteMany({
                     tag: tag,
                     side: sideCode
                 })
@@ -2931,7 +2931,7 @@ async function main(app) {
     //API LINKS
     app.get('/api/tagTrades', async function (req,res) {
         try {
-            const trades = await Open_Trades.find({}).sort({ created: -1 })
+            const trades = await Trades_Opened.find({}).sort({ created: -1 })
 
             // Group by tag for backwards compatibility with old format
             const tagTradesFormat = []
@@ -2981,7 +2981,7 @@ async function main(app) {
     // Get all open positions (aggregated view)
     app.get('/api/openPositions', async function (req, res) {
         try {
-            const positions = await Open_Positions.find({}).sort({ last_updated: -1 })
+            const positions = await Positions_Open.find({}).sort({ last_updated: -1 })
             return res.json(positions)
         } catch (error) {
             console.error('Error fetching open positions:', error)
@@ -2992,7 +2992,7 @@ async function main(app) {
     // Get specific position by tag
     app.get('/api/openPositions/:tag', async function (req, res) {
         try {
-            const position = await Open_Positions.findOne({ tag: req.params.tag })
+            const position = await Positions_Open.findOne({ tag: req.params.tag })
             if (!position) {
                 return res.status(404).json({ error: 'Position not found' })
             }
@@ -3007,7 +3007,7 @@ async function main(app) {
     app.get('/api/closedTrades', async function (req, res) {
         try {
             const limit = parseInt(req.query.limit) || 100
-            const closes = await Closed_Trades.find({})
+            const closes = await Trades_Closed.find({})
                 .sort({ closed_at: -1 })
                 .limit(limit)
             return res.json(closes)
@@ -3020,7 +3020,7 @@ async function main(app) {
     // Get closed trades for specific tag
     app.get('/api/closedTrades/:tag', async function (req, res) {
         try {
-            const closes = await Closed_Trades.find({ tag: req.params.tag })
+            const closes = await Trades_Closed.find({ tag: req.params.tag })
                 .sort({ closed_at: -1 })
             return res.json(closes)
         } catch (error) {
@@ -3032,7 +3032,7 @@ async function main(app) {
     // Calculate total P&L for a tag
     app.get('/api/pnl/:tag', async function (req, res) {
         try {
-            const closes = await Closed_Trades.find({ tag: req.params.tag })
+            const closes = await Trades_Closed.find({ tag: req.params.tag })
             const totalPnl = closes.reduce((sum, close) => sum + (close.pnl || 0), 0)
             const totalPnlPercentage = closes.reduce((sum, close) => sum + (close.pnl_percentage || 0), 0)
 
@@ -3323,7 +3323,7 @@ async function main(app) {
         if (wss.clients.size === 0) return
 
         try {
-            const positions = await Open_Positions.find({}).sort({ last_updated: -1 }).lean()
+            const positions = await Positions_Open.find({}).sort({ last_updated: -1 }).lean()
             const message = JSON.stringify(positions)
 
             wss.clients.forEach(client => {
@@ -3342,7 +3342,7 @@ async function main(app) {
 
         // Send initial positions
         try {
-            const positions = await Open_Positions.find({}).sort({ last_updated: -1 }).lean()
+            const positions = await Positions_Open.find({}).sort({ last_updated: -1 }).lean()
             ws.send(JSON.stringify(positions))
         } catch (e) {
             positionsLog.print('Error', `Failed to send initial data: ${e.message}`)
@@ -3354,7 +3354,7 @@ async function main(app) {
     })
 
     // MongoDB change stream for real-time updates
-    const changeStream = Open_Positions.watch()
+    const changeStream = Positions_Open.watch()
     positionsLog.print('Init', 'MongoDB change stream started')
 
     changeStream.on('change', (change) => {

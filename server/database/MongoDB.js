@@ -95,9 +95,9 @@ module.exports = {
     User: mongoose.model('User', userSchema),
     Trigger_Orders: mongoose.model('Trigger_Orders', triggerOrdersSchema),
     TO_Processed: mongoose.model('TO_Processed', tOrdersProcessedSchema),
-    Open_Trades: mongoose.model('Open_Trades', openTradesSchema),
-    Open_Positions: mongoose.model('Open_Positions', openPositionsSchema),
-    Closed_Trades: mongoose.model('Closed_Trades', closedTradesSchema),
+    Trades_Opened: mongoose.model('Trades_Opened', openTradesSchema),
+    Positions_Open: mongoose.model('Positions_Open', openPositionsSchema),
+    Trades_Closed: mongoose.model('Trades_Closed', closedTradesSchema),
     database: mongoose.connect(process.env.DB_URL, {
         useNewUrlParser: true,
         useUnifiedTopology: true,
