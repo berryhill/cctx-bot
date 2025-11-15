@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Open Positions</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: monospace;
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 20px;
+        }
+        h1 {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .status {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+        .status.connected {
+            color: #00ff00;
+        }
+        .status.disconnected {
+            color: #ff0000;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #0a0a0a;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #333;
+        }
+        th {
+            background: #222;
+            color: #00ffff;
+            position: sticky;
+            top: 0;
+        }
+        tr:hover {
+            background: #1a2a1a;
+        }
+        .long {
+            color: #00ff00;
+        }
+        .short {
+            color: #ff6666;
+        }
+        .spot {
+            color: #ffaa00;
+        }
+        .futures {
+            color: #00aaff;
+        }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>📊 Open Positions</h1>
+    <div class="status disconnected" id="status">⚫ Disconnected</div>
+
+    <table id="positions-table">
+        <thead>
+            <tr>
+                <th>Tag</th>
+                <th>Account</th>
+                <th>Symbol</th>
+                <th>Side</th>
+                <th>Market</th>
+                <th>Contracts</th>
+                <th>Avg Price</th>
+                <th>Trades</th>
+                <th>First Opened</th>
+                <th>Last Updated</th>
+            </tr>
+        </thead>
+        <tbody id="positions-body">
+            <tr><td colspan="10" class="no-data">Loading...</td></tr>
+        </tbody>
+    </table>
+
+    <script>
+        const ws = new WebSocket(`ws://${window.location.host}/positions-ws`);
+        const statusEl = document.getElementById('status');
+        const tbody = document.getElementById('positions-body');
+
+        ws.onopen = () => {
+            statusEl.textContent = '🟢 Connected';
+            statusEl.className = 'status connected';
+        };
+
+        ws.onclose = () => {
+            statusEl.textContent = '🔴 Disconnected';
+            statusEl.className = 'status disconnected';
+            setTimeout(() => window.location.reload(), 3000);
+        };
+
+        ws.onmessage = (event) => {
+            const positions = JSON.parse(event.data);
+            renderPositions(positions);
+        };
+
+        function renderPositions(positions) {
+            if (positions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" class="no-data">No open positions</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = positions.map(pos => {
+                const sideClass = pos.side === 'B' || pos.side === 'LF' ? 'long' : 'short';
+                const marketClass = pos.market_type === 'spot' ? 'spot' : 'futures';
+
+                return `
+                    <tr>
+                        <td>${pos.tag}</td>
+                        <td>${pos.account}</td>
+                        <td>${pos.symbol}</td>
+                        <td class="${sideClass}">${pos.side}</td>
+                        <td class="${marketClass}">${pos.market_type}</td>
+                        <td>${pos.total_contracts.toFixed(4)}</td>
+                        <td>${pos.average_price.toFixed(4)}</td>
+                        <td>${pos.trade_count}</td>
+                        <td>${new Date(pos.first_opened).toLocaleString()}</td>
+                        <td>${new Date(pos.last_updated).toLocaleString()}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+    </script>
+</body>
+</html>

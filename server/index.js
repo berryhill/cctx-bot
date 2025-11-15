@@ -10,6 +10,7 @@ const streamPrivate = require('./wss/wss_auth_md');
 const ExpressServer = require('./express/express');
 const express = new ExpressServer();
 const stream = new BitmexStream(false);
+const WebSocket = require('ws');
 
 //Loggers and Color
 const color = require('./utils/colors')
@@ -2969,6 +2970,60 @@ async function main(app) {
     const listener = app.listen(process.env.PORT || 3000, function () {
         console.log('Using port: '+process.env.PORT)
         expressLog.print(`${color.pick.green}LISTENING${color.pick.end}`,`Listening for calls on port:${listener.address().port}!`)
+    })
+
+    // WebSocket server for positions dashboard
+    const wss = new WebSocket.Server({ server: listener, path: '/positions-ws' })
+    const positionsLog = new Logger('Positions WS', color.pick.cyan)
+
+    positionsLog.print('Init', 'WebSocket server created on /positions-ws')
+
+    // Broadcast positions to all connected clients
+    async function broadcastPositions() {
+        if (wss.clients.size === 0) return
+
+        try {
+            const positions = await Open_Positions.find({}).sort({ last_updated: -1 }).lean()
+            const message = JSON.stringify(positions)
+
+            wss.clients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(message)
+                }
+            })
+        } catch (e) {
+            positionsLog.print('Error', `Failed to broadcast: ${e.message}`)
+        }
+    }
+
+    // Handle new WebSocket connections
+    wss.on('connection', async (ws) => {
+        positionsLog.print('Connect', `Client connected (total: ${wss.clients.size})`)
+
+        // Send initial positions
+        try {
+            const positions = await Open_Positions.find({}).sort({ last_updated: -1 }).lean()
+            ws.send(JSON.stringify(positions))
+        } catch (e) {
+            positionsLog.print('Error', `Failed to send initial data: ${e.message}`)
+        }
+
+        ws.on('close', () => {
+            positionsLog.print('Disconnect', `Client disconnected (total: ${wss.clients.size})`)
+        })
+    })
+
+    // MongoDB change stream for real-time updates
+    const changeStream = Open_Positions.watch()
+    positionsLog.print('Init', 'MongoDB change stream started')
+
+    changeStream.on('change', (change) => {
+        positionsLog.print('Change', `Detected: ${change.operationType}`)
+        broadcastPositions()
+    })
+
+    changeStream.on('error', (error) => {
+        positionsLog.print('Error', `Change stream error: ${error.message}`)
     })
 })();
 
