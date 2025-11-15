@@ -1170,45 +1170,385 @@ async function main(app) {
 
             } else if (command === 'LF') {
                 // LF = Long Futures (market buy)
-                console.log('   📈 Executing LONG FUTURES Market Order...')
-                trade.marketBuyOrder(symbol,qntyUSD).then(function (data) {
-                    console.log('   ✅ CCXT - Bitmex Long Futures Order Complete: ', new Date)
-                    console.log('   Order Data:', JSON.stringify(data, null, 2))
-                    pushTagTrades(orderTag,data,input)
-                    return {code: 200, message:'Success to process Long Futures Market Order', input:input}
-                }).catch(e => {
-                    console.log('   ❌ ERROR in Long Futures Market Order:')
-                    console.log('   Error:', e)
-                    inactiveList.push({
-                        'username': alias,
-                        'action': 'createMarketOrder[LF]',
-                        'input': input,
-                        'error':e
-                    })
-                    console.log("   Failed to submit Long Futures Market Order: ",e)
-                    return {code: 500, message:'Unable to process long futures trade', input:input, e:e}
+                // Check for opposing SF position first
+                console.log('   📈 Processing LONG FUTURES command...')
+
+                const position = await Open_Positions.findOne({
+                    tag: orderTag,
+                    account: input.a,
+                    market_type: 'futures'
                 })
+
+                if (position && position.side === 'SF') {
+                    // Opposing SHORT position exists - handle as close/flip
+                    const currentContracts = position.total_contracts
+                    const newContracts = qntyUSD
+
+                    console.log(`   🔄 Opposing SF position detected: ${currentContracts} contracts @ ${position.average_price}`)
+                    console.log(`   📈 LF command will buy ${newContracts} contracts`)
+
+                    try {
+                        const buyOrder = await trade.marketBuyOrder(symbol, newContracts)
+                        const fillPrice = buyOrder.avgPx || buyOrder.price || buyOrder.lastPx || 0
+
+                        console.log('✅ CCXT - Bitmex Buy Order Complete: ', new Date())
+                        console.log('   Fill price:', fillPrice)
+
+                        if (newContracts < currentContracts) {
+                            // PARTIAL CLOSE: Reduce short position
+                            const remainingContracts = currentContracts - newContracts
+                            console.log(`   📉 Partial close: ${newContracts} contracts closed, ${remainingContracts} remaining`)
+
+                            // Calculate P&L for closed portion
+                            const pnl = (position.average_price - fillPrice) * newContracts
+                            const pnlPercentage = (pnl / (position.average_price * newContracts)) * 100
+                            console.log(`   P&L: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
+
+                            // Update position with reduced contracts
+                            await Open_Positions.updateOne(
+                                { tag: orderTag, account: input.a, market_type: 'futures' },
+                                {
+                                    $set: {
+                                        total_contracts: remainingContracts,
+                                        last_updated: new Date()
+                                    }
+                                }
+                            )
+
+                            // Record partial close
+                            const closeTrade = new Closed_Trades({
+                                tag: orderTag,
+                                account: input.a,
+                                symbol: input.s,
+                                side: 'LF',
+                                market_type: 'futures',
+                                contracts_closed: newContracts,
+                                close_price: fillPrice,
+                                percentage: (newContracts / currentContracts) * 100,
+                                order_id: buyOrder.orderID || buyOrder.id || buyOrder.clOrdID || undefined,
+                                position_before: currentContracts,
+                                position_after: remainingContracts,
+                                average_entry_price: position.average_price,
+                                pnl: pnl,
+                                pnl_percentage: pnlPercentage,
+                                metadata: input,
+                                closed_at: new Date()
+                            })
+                            await closeTrade.save()
+                            console.log('✅ Partial close recorded')
+
+                            return {code: 200, message:`Partial close: ${newContracts} contracts closed, ${remainingContracts} remaining`, input:input, pnl: pnl}
+
+                        } else if (newContracts === currentContracts) {
+                            // FULL CLOSE: Close entire short position
+                            console.log(`   ✅ Full close: entire SF position closed`)
+
+                            // Calculate P&L
+                            const pnl = (position.average_price - fillPrice) * currentContracts
+                            const pnlPercentage = (pnl / (position.average_price * currentContracts)) * 100
+                            console.log(`   P&L: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
+
+                            // Delete position
+                            await Open_Positions.deleteOne({ tag: orderTag, account: input.a, market_type: 'futures' })
+
+                            // Record full close
+                            const closeTrade = new Closed_Trades({
+                                tag: orderTag,
+                                account: input.a,
+                                symbol: input.s,
+                                side: 'LF',
+                                market_type: 'futures',
+                                contracts_closed: currentContracts,
+                                close_price: fillPrice,
+                                percentage: 100,
+                                order_id: buyOrder.orderID || buyOrder.id || buyOrder.clOrdID || undefined,
+                                position_before: currentContracts,
+                                position_after: 0,
+                                average_entry_price: position.average_price,
+                                pnl: pnl,
+                                pnl_percentage: pnlPercentage,
+                                metadata: input,
+                                closed_at: new Date()
+                            })
+                            await closeTrade.save()
+                            console.log('✅ Full close recorded')
+
+                            return {code: 200, message:`Full close: SF position closed`, input:input, pnl: pnl}
+
+                        } else {
+                            // CLOSE + FLIP: Close short and open long with remainder
+                            const remainderContracts = newContracts - currentContracts
+                            console.log(`   🔄 Close + Flip: closing ${currentContracts} SF, opening ${remainderContracts} LF`)
+
+                            // Calculate P&L for closed portion
+                            const pnl = (position.average_price - fillPrice) * currentContracts
+                            const pnlPercentage = (pnl / (position.average_price * currentContracts)) * 100
+                            console.log(`   P&L from close: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
+
+                            // Update position to LF with remainder
+                            await Open_Positions.updateOne(
+                                { tag: orderTag, account: input.a, market_type: 'futures' },
+                                {
+                                    $set: {
+                                        side: 'LF',
+                                        total_contracts: remainderContracts,
+                                        average_price: fillPrice,
+                                        trade_count: 1,
+                                        trade_ids: [buyOrder.orderID || buyOrder.id || buyOrder.clOrdID],
+                                        last_updated: new Date()
+                                    }
+                                }
+                            )
+
+                            // Record close of SF position
+                            const closeTrade = new Closed_Trades({
+                                tag: orderTag,
+                                account: input.a,
+                                symbol: input.s,
+                                side: 'LF',
+                                market_type: 'futures',
+                                contracts_closed: currentContracts,
+                                close_price: fillPrice,
+                                percentage: 100,
+                                order_id: buyOrder.orderID || buyOrder.id || buyOrder.clOrdID || undefined,
+                                position_before: currentContracts,
+                                position_after: 0,
+                                average_entry_price: position.average_price,
+                                pnl: pnl,
+                                pnl_percentage: pnlPercentage,
+                                metadata: { ...input, flip_remainder: remainderContracts },
+                                closed_at: new Date()
+                            })
+                            await closeTrade.save()
+                            console.log(`✅ Closed SF and opened LF with ${remainderContracts} contracts`)
+
+                            return {code: 200, message:`Closed SF + opened LF with ${remainderContracts} contracts`, input:input, pnl: pnl}
+                        }
+
+                    } catch (e) {
+                        console.log('   ❌ ERROR in LF opposing position handling:')
+                        console.log('   Error:', e)
+                        inactiveList.push({
+                            'username': alias,
+                            'action': 'createMarketOrder[LF-opposing]',
+                            'input': input,
+                            'error': e
+                        })
+                        return {code: 500, message:'Unable to process LF close/flip', input:input, e:e}
+                    }
+
+                } else {
+                    // No opposing position - normal LF open/add
+                    console.log('   📈 No opposing position - executing normal LONG FUTURES order')
+                    trade.marketBuyOrder(symbol,qntyUSD).then(function (data) {
+                        console.log('   ✅ CCXT - Bitmex Long Futures Order Complete: ', new Date)
+                        console.log('   Order Data:', JSON.stringify(data, null, 2))
+                        pushTagTrades(orderTag,data,input)
+                        return {code: 200, message:'Success to process Long Futures Market Order', input:input}
+                    }).catch(e => {
+                        console.log('   ❌ ERROR in Long Futures Market Order:')
+                        console.log('   Error:', e)
+                        inactiveList.push({
+                            'username': alias,
+                            'action': 'createMarketOrder[LF]',
+                            'input': input,
+                            'error':e
+                        })
+                        console.log("   Failed to submit Long Futures Market Order: ",e)
+                        return {code: 500, message:'Unable to process long futures trade', input:input, e:e}
+                    })
+                }
 
             } else if (command === 'SF') {
                 // SF = Short Futures (market sell)
-                console.log('   📉 Executing SHORT FUTURES Market Order...')
-                trade.marketSellOrder(symbol,qntyUSD).then(function (data) {
-                    console.log('   ✅ CCXT - Bitmex Short Futures Order Complete: ', new Date)
-                    console.log('   Order Data:', JSON.stringify(data, null, 2))
-                    pushTagTrades(orderTag,data,input)
-                    return {code: 200, message:'Success to process Short Futures Market Order', input:input}
-                }).catch(e => {
-                    console.log('   ❌ ERROR in Short Futures Market Order:')
-                    console.log('   Error:', e)
-                    inactiveList.push({
-                        'username': alias,
-                        'action': 'createMarketOrder[SF]',
-                        'input': input,
-                        'error':e
-                    })
-                    console.log("   Failed to submit Short Futures Market Order: ",e)
-                    return {code: 500, message:'Unable to process short futures trade', input:input, e:e}
+                // Check for opposing LF position first
+                console.log('   📉 Processing SHORT FUTURES command...')
+
+                const position = await Open_Positions.findOne({
+                    tag: orderTag,
+                    account: input.a,
+                    market_type: 'futures'
                 })
+
+                if (position && position.side === 'LF') {
+                    // Opposing LONG position exists - handle as close/flip
+                    const currentContracts = position.total_contracts
+                    const newContracts = qntyUSD
+
+                    console.log(`   🔄 Opposing LF position detected: ${currentContracts} contracts @ ${position.average_price}`)
+                    console.log(`   📉 SF command will sell ${newContracts} contracts`)
+
+                    try {
+                        const sellOrder = await trade.marketSellOrder(symbol, newContracts)
+                        const fillPrice = sellOrder.avgPx || sellOrder.price || sellOrder.lastPx || 0
+
+                        console.log('✅ CCXT - Bitmex Sell Order Complete: ', new Date())
+                        console.log('   Fill price:', fillPrice)
+
+                        if (newContracts < currentContracts) {
+                            // PARTIAL CLOSE: Reduce long position
+                            const remainingContracts = currentContracts - newContracts
+                            console.log(`   📉 Partial close: ${newContracts} contracts closed, ${remainingContracts} remaining`)
+
+                            // Calculate P&L for closed portion
+                            const pnl = (fillPrice - position.average_price) * newContracts
+                            const pnlPercentage = (pnl / (position.average_price * newContracts)) * 100
+                            console.log(`   P&L: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
+
+                            // Update position with reduced contracts
+                            await Open_Positions.updateOne(
+                                { tag: orderTag, account: input.a, market_type: 'futures' },
+                                {
+                                    $set: {
+                                        total_contracts: remainingContracts,
+                                        last_updated: new Date()
+                                    }
+                                }
+                            )
+
+                            // Record partial close
+                            const closeTrade = new Closed_Trades({
+                                tag: orderTag,
+                                account: input.a,
+                                symbol: input.s,
+                                side: 'SF',
+                                market_type: 'futures',
+                                contracts_closed: newContracts,
+                                close_price: fillPrice,
+                                percentage: (newContracts / currentContracts) * 100,
+                                order_id: sellOrder.orderID || sellOrder.id || sellOrder.clOrdID || undefined,
+                                position_before: currentContracts,
+                                position_after: remainingContracts,
+                                average_entry_price: position.average_price,
+                                pnl: pnl,
+                                pnl_percentage: pnlPercentage,
+                                metadata: input,
+                                closed_at: new Date()
+                            })
+                            await closeTrade.save()
+                            console.log('✅ Partial close recorded')
+
+                            return {code: 200, message:`Partial close: ${newContracts} contracts closed, ${remainingContracts} remaining`, input:input, pnl: pnl}
+
+                        } else if (newContracts === currentContracts) {
+                            // FULL CLOSE: Close entire long position
+                            console.log(`   ✅ Full close: entire LF position closed`)
+
+                            // Calculate P&L
+                            const pnl = (fillPrice - position.average_price) * currentContracts
+                            const pnlPercentage = (pnl / (position.average_price * currentContracts)) * 100
+                            console.log(`   P&L: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
+
+                            // Delete position
+                            await Open_Positions.deleteOne({ tag: orderTag, account: input.a, market_type: 'futures' })
+
+                            // Record full close
+                            const closeTrade = new Closed_Trades({
+                                tag: orderTag,
+                                account: input.a,
+                                symbol: input.s,
+                                side: 'SF',
+                                market_type: 'futures',
+                                contracts_closed: currentContracts,
+                                close_price: fillPrice,
+                                percentage: 100,
+                                order_id: sellOrder.orderID || sellOrder.id || sellOrder.clOrdID || undefined,
+                                position_before: currentContracts,
+                                position_after: 0,
+                                average_entry_price: position.average_price,
+                                pnl: pnl,
+                                pnl_percentage: pnlPercentage,
+                                metadata: input,
+                                closed_at: new Date()
+                            })
+                            await closeTrade.save()
+                            console.log('✅ Full close recorded')
+
+                            return {code: 200, message:`Full close: LF position closed`, input:input, pnl: pnl}
+
+                        } else {
+                            // CLOSE + FLIP: Close long and open short with remainder
+                            const remainderContracts = newContracts - currentContracts
+                            console.log(`   🔄 Close + Flip: closing ${currentContracts} LF, opening ${remainderContracts} SF`)
+
+                            // Calculate P&L for closed portion
+                            const pnl = (fillPrice - position.average_price) * currentContracts
+                            const pnlPercentage = (pnl / (position.average_price * currentContracts)) * 100
+                            console.log(`   P&L from close: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
+
+                            // Update position to SF with remainder
+                            await Open_Positions.updateOne(
+                                { tag: orderTag, account: input.a, market_type: 'futures' },
+                                {
+                                    $set: {
+                                        side: 'SF',
+                                        total_contracts: remainderContracts,
+                                        average_price: fillPrice,
+                                        trade_count: 1,
+                                        trade_ids: [sellOrder.orderID || sellOrder.id || sellOrder.clOrdID],
+                                        last_updated: new Date()
+                                    }
+                                }
+                            )
+
+                            // Record close of LF position
+                            const closeTrade = new Closed_Trades({
+                                tag: orderTag,
+                                account: input.a,
+                                symbol: input.s,
+                                side: 'SF',
+                                market_type: 'futures',
+                                contracts_closed: currentContracts,
+                                close_price: fillPrice,
+                                percentage: 100,
+                                order_id: sellOrder.orderID || sellOrder.id || sellOrder.clOrdID || undefined,
+                                position_before: currentContracts,
+                                position_after: 0,
+                                average_entry_price: position.average_price,
+                                pnl: pnl,
+                                pnl_percentage: pnlPercentage,
+                                metadata: { ...input, flip_remainder: remainderContracts },
+                                closed_at: new Date()
+                            })
+                            await closeTrade.save()
+                            console.log(`✅ Closed LF and opened SF with ${remainderContracts} contracts`)
+
+                            return {code: 200, message:`Closed LF + opened SF with ${remainderContracts} contracts`, input:input, pnl: pnl}
+                        }
+
+                    } catch (e) {
+                        console.log('   ❌ ERROR in SF opposing position handling:')
+                        console.log('   Error:', e)
+                        inactiveList.push({
+                            'username': alias,
+                            'action': 'createMarketOrder[SF-opposing]',
+                            'input': input,
+                            'error': e
+                        })
+                        return {code: 500, message:'Unable to process SF close/flip', input:input, e:e}
+                    }
+
+                } else {
+                    // No opposing position - normal SF open/add
+                    console.log('   📉 No opposing position - executing normal SHORT FUTURES order')
+                    trade.marketSellOrder(symbol,qntyUSD).then(function (data) {
+                        console.log('   ✅ CCXT - Bitmex Short Futures Order Complete: ', new Date)
+                        console.log('   Order Data:', JSON.stringify(data, null, 2))
+                        pushTagTrades(orderTag,data,input)
+                        return {code: 200, message:'Success to process Short Futures Market Order', input:input}
+                    }).catch(e => {
+                        console.log('   ❌ ERROR in Short Futures Market Order:')
+                        console.log('   Error:', e)
+                        inactiveList.push({
+                            'username': alias,
+                            'action': 'createMarketOrder[SF]',
+                            'input': input,
+                            'error':e
+                        })
+                        console.log("   Failed to submit Short Futures Market Order: ",e)
+                        return {code: 500, message:'Unable to process short futures trade', input:input, e:e}
+                    })
+                }
 
             } else if (command === 'FLF') {
                 // FLF = Flip Long to Short (only if currently LF)
