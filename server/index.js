@@ -307,7 +307,8 @@ async function main(app) {
                 case 'SF':
                 case 'CLF':
                 case 'CSF':
-                case 'FLIPF':
+                case 'FLF':
+                case 'FSF':
                     return 'futures'
                 default:
                     return 'spot'
@@ -1208,9 +1209,9 @@ async function main(app) {
                     return {code: 500, message:'Unable to process short futures trade', input:input, e:e}
                 })
 
-            } else if (command === 'FLIPF') {
-                // FLIPF = Flip Futures Position
-                console.log('   🔄 Executing FLIP FUTURES position...')
+            } else if (command === 'FLF') {
+                // FLF = Flip Long to Short (only if currently LF)
+                console.log('   🔄 Executing FLIP LONG to SHORT...')
 
                 // 1. Get current position from open_positions (futures only)
                 const position = await Open_Positions.findOne({
@@ -1226,40 +1227,32 @@ async function main(app) {
 
                 const currentContracts = position.total_contracts
                 const currentSide = position.side
+
+                // Validate: only flip if currently LF
+                if (currentSide !== 'LF') {
+                    console.log(`⚠️  FLF command ignored: current position is ${currentSide}, not LF`)
+                    mainLog.print('Warning', `FLF ignored - position already ${currentSide} for tag "${orderTag}"`)
+                    return {code: 200, message:`FLF ignored - position already ${currentSide}`, input:input}
+                }
+
                 const flipContracts = currentContracts * 2 // Close current + open opposite
 
                 console.log(`📊 Current Position: ${currentSide} ${currentContracts} contracts @ avg ${position.average_price}`)
-                console.log(`   Flipping to opposite side: ${flipContracts} contracts`)
+                console.log(`   Flipping LF to SF: ${flipContracts} contracts`)
 
-                // 2. Execute flip trade (opposite direction, double quantity)
+                // 2. Execute flip trade (sell 2x to flip long to short)
                 try {
-                    let flipOrder
-                    let newSide
-
-                    if (currentSide === 'LF') {
-                        // Currently long -> flip to short by selling 2x
-                        console.log('   📉 Flipping LF to SF: selling', flipContracts, 'contracts')
-                        flipOrder = await trade.marketSellOrder(symbol, flipContracts)
-                        newSide = 'SF'
-                    } else {
-                        // Currently short -> flip to long by buying 2x
-                        console.log('   📈 Flipping SF to LF: buying', flipContracts, 'contracts')
-                        flipOrder = await trade.marketBuyOrder(symbol, flipContracts)
-                        newSide = 'LF'
-                    }
+                    console.log('   📉 Selling', flipContracts, 'contracts to flip LF → SF')
+                    const flipOrder = await trade.marketSellOrder(symbol, flipContracts)
+                    const newSide = 'SF'
 
                     const fillPrice = flipOrder.avgPx || flipOrder.price || flipOrder.lastPx || 0
 
-                    console.log('✅ CCXT - Bitmex Flip Futures Order Complete: ', new Date())
+                    console.log('✅ CCXT - Bitmex Flip Long to Short Order Complete: ', new Date())
                     console.log('   Fill price:', fillPrice)
 
                     // 3. Calculate P&L from closed portion
-                    let pnl
-                    if (currentSide === 'LF') {
-                        pnl = (fillPrice - position.average_price) * currentContracts
-                    } else {
-                        pnl = (position.average_price - fillPrice) * currentContracts
-                    }
+                    const pnl = (fillPrice - position.average_price) * currentContracts
                     const pnlPercentage = (pnl / (position.average_price * currentContracts)) * 100
 
                     console.log(`   P&L from closed portion: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
@@ -1285,7 +1278,7 @@ async function main(app) {
                         tag: orderTag,
                         account: input.a,
                         symbol: input.s,
-                        side: currentSide === 'LF' ? 'SF' : 'LF', // Opposite side to close
+                        side: 'SF', // Sold to close the long
                         market_type: 'futures',
                         contracts_closed: currentContracts,
                         close_price: fillPrice,
@@ -1296,24 +1289,124 @@ async function main(app) {
                         average_entry_price: position.average_price,
                         pnl: pnl,
                         pnl_percentage: pnlPercentage,
-                        metadata: { ...input, flip: true, new_side: newSide },
+                        metadata: { ...input, flip: 'FLF', new_side: newSide },
                         closed_at: new Date()
                     })
                     await closeTrade.save()
                     console.log('✅ Close action recorded in closed_trades')
 
-                    return {code: 200, message:`Success flipping futures position: ${currentSide} → ${newSide}`, input:input, pnl: pnl}
+                    return {code: 200, message:`Success flipping futures position: LF → SF`, input:input, pnl: pnl}
 
                 } catch (e) {
-                    console.log('❌ ERROR in Flip Futures Order:')
+                    console.log('❌ ERROR in Flip Long to Short Order:')
                     console.log('   Error:', e)
                     inactiveList.push({
                         'username': alias,
-                        'action': 'createMarketOrder[FLIPF]',
+                        'action': 'createMarketOrder[FLF]',
                         'input': input,
                         'error': e
                     })
-                    return {code: 500, message:'Unable to flip futures position', input:input, e:e}
+                    return {code: 500, message:'Unable to flip long to short', input:input, e:e}
+                }
+
+            } else if (command === 'FSF') {
+                // FSF = Flip Short to Long (only if currently SF)
+                console.log('   🔄 Executing FLIP SHORT to LONG...')
+
+                // 1. Get current position from open_positions (futures only)
+                const position = await Open_Positions.findOne({
+                    tag: orderTag,
+                    account: input.a,
+                    market_type: 'futures'
+                })
+
+                if (!position) {
+                    console.log(`❌ No open futures position found for tag "${orderTag}"`)
+                    return {code: 404, message:'No open futures position found to flip', input:input}
+                }
+
+                const currentContracts = position.total_contracts
+                const currentSide = position.side
+
+                // Validate: only flip if currently SF
+                if (currentSide !== 'SF') {
+                    console.log(`⚠️  FSF command ignored: current position is ${currentSide}, not SF`)
+                    mainLog.print('Warning', `FSF ignored - position already ${currentSide} for tag "${orderTag}"`)
+                    return {code: 200, message:`FSF ignored - position already ${currentSide}`, input:input}
+                }
+
+                const flipContracts = currentContracts * 2 // Close current + open opposite
+
+                console.log(`📊 Current Position: ${currentSide} ${currentContracts} contracts @ avg ${position.average_price}`)
+                console.log(`   Flipping SF to LF: ${flipContracts} contracts`)
+
+                // 2. Execute flip trade (buy 2x to flip short to long)
+                try {
+                    console.log('   📈 Buying', flipContracts, 'contracts to flip SF → LF')
+                    const flipOrder = await trade.marketBuyOrder(symbol, flipContracts)
+                    const newSide = 'LF'
+
+                    const fillPrice = flipOrder.avgPx || flipOrder.price || flipOrder.lastPx || 0
+
+                    console.log('✅ CCXT - Bitmex Flip Short to Long Order Complete: ', new Date())
+                    console.log('   Fill price:', fillPrice)
+
+                    // 3. Calculate P&L from closed portion
+                    const pnl = (position.average_price - fillPrice) * currentContracts
+                    const pnlPercentage = (pnl / (position.average_price * currentContracts)) * 100
+
+                    console.log(`   P&L from closed portion: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
+
+                    // 4. Update position to new side
+                    await Open_Positions.updateOne(
+                        { tag: orderTag, account: input.a, market_type: 'futures' },
+                        {
+                            $set: {
+                                side: newSide,
+                                total_contracts: currentContracts,
+                                average_price: fillPrice,
+                                trade_count: 1,
+                                trade_ids: [flipOrder.orderID || flipOrder.id || flipOrder.clOrdID],
+                                last_updated: new Date()
+                            }
+                        }
+                    )
+                    console.log(`✅ Position flipped: ${currentSide} → ${newSide} (${currentContracts} contracts @ ${fillPrice})`)
+
+                    // 5. Record close action for closed portion in closed_trades
+                    const closeTrade = new Closed_Trades({
+                        tag: orderTag,
+                        account: input.a,
+                        symbol: input.s,
+                        side: 'LF', // Bought to close the short
+                        market_type: 'futures',
+                        contracts_closed: currentContracts,
+                        close_price: fillPrice,
+                        percentage: 100, // Closed 100% of old position
+                        order_id: flipOrder.orderID || flipOrder.id || flipOrder.clOrdID || undefined,
+                        position_before: currentContracts,
+                        position_after: 0, // Old position fully closed
+                        average_entry_price: position.average_price,
+                        pnl: pnl,
+                        pnl_percentage: pnlPercentage,
+                        metadata: { ...input, flip: 'FSF', new_side: newSide },
+                        closed_at: new Date()
+                    })
+                    await closeTrade.save()
+                    console.log('✅ Close action recorded in closed_trades')
+
+                    return {code: 200, message:`Success flipping futures position: SF → LF`, input:input, pnl: pnl}
+
+                } catch (e) {
+                    console.log('❌ ERROR in Flip Short to Long Order:')
+                    console.log('   Error:', e)
+                    inactiveList.push({
+                        'username': alias,
+                        'action': 'createMarketOrder[FSF]',
+                        'input': input,
+                        'error': e
+                    })
+                    return {code: 500, message:'Unable to flip short to long', input:input, e:e}
                 }
 
             } else {
@@ -2037,9 +2130,14 @@ async function main(app) {
                         mainLog.print(`Trade:${alias}`,"M-CSF")
                         return createMarketOrder(symbol, input)
 
-                    case 'FLIPF':
-                        //Flip Futures Position
-                        mainLog.print(`Trade:${alias}`,"M-FLIPF")
+                    case 'FLF':
+                        //Flip Long to Short
+                        mainLog.print(`Trade:${alias}`,"M-FLF")
+                        return createMarketOrder(symbol, input)
+
+                    case 'FSF':
+                        //Flip Short to Long
+                        mainLog.print(`Trade:${alias}`,"M-FSF")
                         return createMarketOrder(symbol, input)
                 }
                 break;
