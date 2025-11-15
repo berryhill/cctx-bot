@@ -3021,8 +3021,11 @@ async function main(app) {
                                 uBal = btcBalance
                             } else {
                                 console.log(`   ⚠️  WebSocket margin data not available, fetching via CCXT...`)
+                                // Get exchange from user record (defaults to 'bitmex')
+                                const exchange = user.exchange || 'bitmex'
+                                console.log(`   📊 User exchange: ${exchange}`)
                                 // Create temporary CCXT instance to fetch balance
-                                const tempCCXT = new CreateCCXT(apiKey, apiSecret, user.username)
+                                const tempCCXT = new CreateCCXT(apiKey, apiSecret, user.username, exchange)
                                 await tempCCXT.init()
                                 const balance = await tempCCXT.balance()
                                 
@@ -3044,8 +3047,10 @@ async function main(app) {
                             if(hasSufficientBalance) {
                                 console.log(`   ✅ Balance sufficient (BTC: ${btcBalance}, USDT: ${usdtBalance})`)
                                 ccxtLog.print('BALANCE_OK',`${user.username} has sufficient balance - adding to CCXT!`)
-                                console.log(`   🔧 Creating CCXT instance...`)
-                                users[user.username]['ccxt'] = new CreateCCXT(apiKey, apiSecret, user.username)
+                                // Get exchange from user record (defaults to 'bitmex')
+                                const exchange = user.exchange || 'bitmex'
+                                console.log(`   🔧 Creating CCXT instance for ${exchange}...`)
+                                users[user.username]['ccxt'] = new CreateCCXT(apiKey, apiSecret, user.username, exchange)
                                 await users[user.username]['ccxt'].init()
                                     .then(()=> {
                                         usersProcessed++
