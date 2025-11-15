@@ -236,6 +236,59 @@ async function main(app) {
             }
         }
 
+        // Convert USD amount to contract count for futures trading
+        async function convertFuturesUSDToContracts(usdAmount, symbol, trade) {
+            console.log('\n💱 convertFuturesUSDToContracts() called')
+            console.log('   USD Amount:', usdAmount)
+            console.log('   Symbol:', symbol)
+
+            try {
+                // Fetch market data from BitMEX
+                const market = trade.bitmex.markets[symbol]
+
+                if (!market || !market.info) {
+                    throw new Error(`Market data not found for ${symbol}`)
+                }
+
+                const multiplier = market.info.multiplier
+                const underlyingToSettleMultiplier = market.info.underlyingToSettleMultiplier
+                const lotSize = market.info.lotSize
+
+                console.log('   Multiplier:', multiplier)
+                console.log('   underlyingToSettleMultiplier:', underlyingToSettleMultiplier)
+                console.log('   Lot Size:', lotSize)
+
+                // Calculate contract size
+                const contractSize = multiplier / underlyingToSettleMultiplier
+                console.log('   Contract Size (USD per contract):', contractSize)
+
+                // Calculate minimum trade amount
+                const minTradeAmount = contractSize * lotSize
+                console.log('   Minimum Trade Amount (USD):', minTradeAmount)
+
+                // Calculate number of contracts for USD amount
+                let contracts = Math.floor(usdAmount / contractSize)
+                console.log('   Raw contracts (before rounding):', contracts)
+
+                // If below minimum, trade the minimum
+                if (usdAmount < minTradeAmount) {
+                    contracts = lotSize
+                    console.log(`   ⚠️  Order below minimum ($${minTradeAmount} USD), using minimum: ${contracts} contracts`)
+                } else {
+                    // Round to lot size
+                    contracts = Math.floor(contracts / lotSize) * lotSize
+                    console.log('   Rounded to lot size:', contracts)
+                }
+
+                console.log('   ✅ Final contracts:', contracts)
+                return contracts
+
+            } catch (error) {
+                console.error('   ❌ Error converting USD to contracts:', error.message)
+                throw error
+            }
+        }
+
         //
         function getAutoQnty(defaultSize, isUSDT = false) {
             console.log('\n💰 getAutoQnty() called')
@@ -660,9 +713,22 @@ async function main(app) {
                     default: return 1
                 }
             }
-            
+
+            // Check if this is a futures command
+            const isFuturesCommand = ['LF', 'SF', 'CLF', 'CSF', 'FLF', 'FSF'].includes(command)
+            const isFuturesSymbol = ['XBTUSD', 'ETHUSD', 'XRPUSD', 'LTCUSD', 'BCHUSD'].includes(symbol)
+
+            console.log("   Is Futures Command:", isFuturesCommand)
+            console.log("   Is Futures Symbol:", isFuturesSymbol)
+
             let qntyUSD
-            if (isUSDTPair && isUSDTAmount) {
+            if (isFuturesCommand && isFuturesSymbol) {
+                // For futures commands, qntyValue represents USD amount to trade
+                // Convert USD to contract count
+                console.log("   🔄 Converting futures USD to contracts...")
+                qntyUSD = await convertFuturesUSDToContracts(qntyValue, symbol, trade)
+                console.log(`   ✅ Futures conversion: $${qntyValue} USD → ${qntyUSD} contracts`)
+            } else if (isUSDTPair && isUSDTAmount) {
                 // For USDT pairs with USDT amount: convert USDT to contracts
                 // Get current price: USDT amount / price = contracts
                 const ticker = await trade.ticker(symbol)
