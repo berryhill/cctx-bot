@@ -94,7 +94,8 @@
     </table>
 
     <script>
-        const ws = new WebSocket(`ws://${window.location.host}/positions-ws`);
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(`${protocol}//${window.location.host}/positions-ws`);
         const statusEl = document.getElementById('status');
         const tbody = document.getElementById('positions-body');
 
