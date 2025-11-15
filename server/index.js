@@ -707,29 +707,201 @@ async function main(app) {
             console.log("   Tag: ", orderTag)
             
             if(command === 'S') {
-                console.log('   📉 Executing SELL Market Order...')
-                // 2. Create Market Order
-                trade.marketSellOrder(symbol,qntyUSD).then(function (data) {
-                    console.log('   ✅ CCXT - Bitmex Sell Order Complete: ', new Date)
-                    console.log('   Order Data:', JSON.stringify(data, null, 2))
-                    pushTagTrades(orderTag,data,input)
-                    return {code: 200, message:'Success to process Sell Market Order', input:input}
-                }).catch(e => {
-                    //Send Server Error!
-                    console.log('   ❌ ERROR in Market Sell Order:')
-                    console.log('   Error:', e)
-                    inactiveList.push({
-                        'username': alias,
-                        'action': 'createMarketOrder[1]',
-                        'input': input,
-                        'error':e
-                    })
-                    console.log("   Failed to submit Market Sell Order: ",e)
-                    return {code: 500, message:'Unable to process trade', input:input, e:e}
+                // S = Sell Spot
+                // Check for opposing B position first
+                console.log('   📉 Processing SELL SPOT command...')
+
+                const position = await Positions_Open.findOne({
+                    tag: orderTag,
+                    account: input.a,
+                    market_type: 'spot'
                 })
 
+                if (position && position.side === 'B') {
+                    // Opposing BUY position exists - handle as close/flip
+                    const currentContracts = position.total_contracts
+                    const newContracts = qntyUSD
+
+                    console.log(`   🔄 Opposing B position detected: ${currentContracts} contracts @ ${position.average_price}`)
+                    console.log(`   📉 S command will sell ${newContracts} contracts`)
+
+                    try {
+                        const sellOrder = await trade.marketSellOrder(symbol, newContracts)
+                        const fillPrice = sellOrder.avgPx || sellOrder.price || sellOrder.lastPx || 0
+
+                        console.log('✅ CCXT - Bitmex Sell Order Complete: ', new Date())
+                        console.log('   Fill price:', fillPrice)
+
+                        if (newContracts < currentContracts) {
+                            // PARTIAL CLOSE: Reduce buy position
+                            const remainingContracts = currentContracts - newContracts
+                            console.log(`   📉 Partial close: ${newContracts} contracts closed, ${remainingContracts} remaining`)
+
+                            // Calculate P&L for closed portion
+                            const pnl = (fillPrice - position.average_price) * newContracts
+                            const pnlPercentage = (pnl / (position.average_price * newContracts)) * 100
+                            console.log(`   P&L: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
+
+                            // Update position with reduced contracts
+                            await Positions_Open.updateOne(
+                                { tag: orderTag, account: input.a, market_type: 'spot' },
+                                {
+                                    $set: {
+                                        total_contracts: remainingContracts,
+                                        last_updated: new Date()
+                                    }
+                                }
+                            )
+
+                            // Record partial close
+                            const closeTrade = new Trades_Closed({
+                                tag: orderTag,
+                                account: input.a,
+                                symbol: input.s,
+                                side: 'S',
+                                market_type: 'spot',
+                                contracts_closed: newContracts,
+                                close_price: fillPrice,
+                                percentage: (newContracts / currentContracts) * 100,
+                                order_id: sellOrder.orderID || sellOrder.id || sellOrder.clOrdID || undefined,
+                                position_before: currentContracts,
+                                position_after: remainingContracts,
+                                average_entry_price: position.average_price,
+                                pnl: pnl,
+                                pnl_percentage: pnlPercentage,
+                                metadata: input,
+                                closed_at: new Date()
+                            })
+                            await closeTrade.save()
+                            console.log('✅ Partial close recorded')
+
+                            return {code: 200, message:`Partial close: ${newContracts} contracts closed, ${remainingContracts} remaining`, input:input, pnl: pnl}
+
+                        } else if (newContracts === currentContracts) {
+                            // FULL CLOSE: Close entire buy position
+                            console.log(`   ✅ Full close: entire B position closed`)
+
+                            // Calculate P&L
+                            const pnl = (fillPrice - position.average_price) * currentContracts
+                            const pnlPercentage = (pnl / (position.average_price * currentContracts)) * 100
+                            console.log(`   P&L: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
+
+                            // Delete position
+                            await Positions_Open.deleteOne({ tag: orderTag, account: input.a, market_type: 'spot' })
+
+                            // Record full close
+                            const closeTrade = new Trades_Closed({
+                                tag: orderTag,
+                                account: input.a,
+                                symbol: input.s,
+                                side: 'S',
+                                market_type: 'spot',
+                                contracts_closed: currentContracts,
+                                close_price: fillPrice,
+                                percentage: 100,
+                                order_id: sellOrder.orderID || sellOrder.id || sellOrder.clOrdID || undefined,
+                                position_before: currentContracts,
+                                position_after: 0,
+                                average_entry_price: position.average_price,
+                                pnl: pnl,
+                                pnl_percentage: pnlPercentage,
+                                metadata: input,
+                                closed_at: new Date()
+                            })
+                            await closeTrade.save()
+                            console.log('✅ Full close recorded')
+
+                            return {code: 200, message:`Full close: B position closed`, input:input, pnl: pnl}
+
+                        } else {
+                            // CLOSE + FLIP: Close buy and open sell with remainder
+                            const remainderContracts = newContracts - currentContracts
+                            console.log(`   🔄 Close + Flip: closing ${currentContracts} B, opening ${remainderContracts} S`)
+
+                            // Calculate P&L for closed portion
+                            const pnl = (fillPrice - position.average_price) * currentContracts
+                            const pnlPercentage = (pnl / (position.average_price * currentContracts)) * 100
+                            console.log(`   P&L from close: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
+
+                            // Update position to S with remainder
+                            await Positions_Open.updateOne(
+                                { tag: orderTag, account: input.a, market_type: 'spot' },
+                                {
+                                    $set: {
+                                        side: 'S',
+                                        total_contracts: remainderContracts,
+                                        average_price: fillPrice,
+                                        trade_count: 1,
+                                        trade_ids: [sellOrder.orderID || sellOrder.id || sellOrder.clOrdID],
+                                        last_updated: new Date()
+                                    }
+                                }
+                            )
+
+                            // Record close of B position
+                            const closeTrade = new Trades_Closed({
+                                tag: orderTag,
+                                account: input.a,
+                                symbol: input.s,
+                                side: 'S',
+                                market_type: 'spot',
+                                contracts_closed: currentContracts,
+                                close_price: fillPrice,
+                                percentage: 100,
+                                order_id: sellOrder.orderID || sellOrder.id || sellOrder.clOrdID || undefined,
+                                position_before: currentContracts,
+                                position_after: 0,
+                                average_entry_price: position.average_price,
+                                pnl: pnl,
+                                pnl_percentage: pnlPercentage,
+                                metadata: { ...input, flip_remainder: remainderContracts },
+                                closed_at: new Date()
+                            })
+                            await closeTrade.save()
+                            console.log(`✅ Closed B and opened S with ${remainderContracts} contracts`)
+
+                            return {code: 200, message:`Closed B + opened S with ${remainderContracts} contracts`, input:input, pnl: pnl}
+                        }
+
+                    } catch (e) {
+                        console.log('   ❌ ERROR in S opposing position handling:')
+                        console.log('   Error:', e)
+                        inactiveList.push({
+                            'username': alias,
+                            'action': 'createMarketOrder[S-opposing]',
+                            'input': input,
+                            'error': e
+                        })
+                        return {code: 500, message:'Unable to process S close/flip', input:input, e:e}
+                    }
+
+                } else {
+                    // No opposing position - normal S open/add
+                    console.log('   📉 No opposing position - executing normal SELL SPOT order')
+                    trade.marketSellOrder(symbol,qntyUSD).then(function (data) {
+                        console.log('   ✅ CCXT - Bitmex Sell Order Complete: ', new Date)
+                        console.log('   Order Data:', JSON.stringify(data, null, 2))
+                        pushTagTrades(orderTag,data,input)
+                        return {code: 200, message:'Success to process Sell Market Order', input:input}
+                    }).catch(e => {
+                        //Send Server Error!
+                        console.log('   ❌ ERROR in Market Sell Order:')
+                        console.log('   Error:', e)
+                        inactiveList.push({
+                            'username': alias,
+                            'action': 'createMarketOrder[S]',
+                            'input': input,
+                            'error':e
+                        })
+                        console.log("   Failed to submit Market Sell Order: ",e)
+                        return {code: 500, message:'Unable to process trade', input:input, e:e}
+                    })
+                }
+
             } else if (command === 'B') {
-                console.log('   📈 Executing BUY Market Order...')
+                // B = Buy Spot (add to position or create new)
+                console.log('   📈 Processing BUY SPOT command...')
+                console.log('   📈 Executing BUY Market Order (spot can only add to holdings)')
                 //2. Create Market Order
                 trade.marketBuyOrder(symbol,qntyUSD).then(function (data) {
                     console.log('   ✅ CCXT - Bitmex Buy Order Complete: ', new Date)
@@ -744,7 +916,7 @@ async function main(app) {
                     console.log('   Error:', e)
                     inactiveList.push({
                         'username': alias,
-                        'action': 'creatMarketOrder[1]',
+                        'action': 'creatMarketOrder[B]',
                         'input': input,
                         'error':e
                     })
