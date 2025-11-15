@@ -83,13 +83,14 @@
                 <th>Market</th>
                 <th>Contracts</th>
                 <th>Avg Price</th>
+                <th>Dollar Amount</th>
                 <th>Trades</th>
                 <th>First Opened</th>
                 <th>Last Updated</th>
             </tr>
         </thead>
         <tbody id="positions-body">
-            <tr><td colspan="10" class="no-data">Loading...</td></tr>
+            <tr><td colspan="11" class="no-data">Loading...</td></tr>
         </tbody>
     </table>
 
@@ -117,13 +118,14 @@
 
         function renderPositions(positions) {
             if (positions.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" class="no-data">No open positions</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="11" class="no-data">No open positions</td></tr>';
                 return;
             }
 
             tbody.innerHTML = positions.map(pos => {
                 const sideClass = pos.side === 'B' || pos.side === 'LF' ? 'long' : 'short';
                 const marketClass = pos.market_type === 'spot' ? 'spot' : 'futures';
+                const dollarAmount = pos.dollar_amount ? `$${pos.dollar_amount.toFixed(2)}` : '-';
 
                 return `
                     <tr>
@@ -134,6 +136,7 @@
                         <td class="${marketClass}">${pos.market_type}</td>
                         <td>${pos.total_contracts.toFixed(4)}</td>
                         <td>${pos.average_price.toFixed(4)}</td>
+                        <td>${dollarAmount}</td>
                         <td>${pos.trade_count}</td>
                         <td>${new Date(pos.first_opened).toLocaleString()}</td>
                         <td>${new Date(pos.last_updated).toLocaleString()}</td>

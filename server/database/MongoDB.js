@@ -48,6 +48,7 @@ const openTradesSchema = new Schema({
     price: { type: Number, required: true },
     contracts: { type: Number, required: true },
     num_contracts: { type: Number, required: false },
+    dollar_amount: { type: Number, required: false },
     metadata: { type: Object, required: false },
     opened: { type: Date, default: Date.now },
     created: { type: Date, default: Date.now }
@@ -61,6 +62,7 @@ const openPositionsSchema = new Schema({
     market_type: { type: String, enum: ['spot', 'futures'], required: false, default: 'spot' },
     total_contracts: { type: Number, required: true, min: 0 },
     average_price: { type: Number, required: true },
+    dollar_amount: { type: Number, required: false },
     trade_count: { type: Number, required: true, default: 0 },
     trade_ids: [{ type: String }],
     first_opened: { type: Date, required: true },
@@ -84,6 +86,7 @@ const closedTradesSchema = new Schema({
     position_before: { type: Number, required: true },
     position_after: { type: Number, required: true },
     average_entry_price: { type: Number, required: true },
+    dollar_amount: { type: Number, required: false },
     pnl: { type: Number, required: false },
     pnl_percentage: { type: Number, required: false },
     metadata: { type: Object, required: false },

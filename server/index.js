@@ -446,10 +446,11 @@ async function main(app) {
         }
 
         //Function to insert trades with specific tag & side
-        async function pushTagTrades(tag, data, input) {
+        async function pushTagTrades(tag, data, input, dollarAmount = null) {
             console.log('\n📌 pushTagTrades() called')
             console.log('   Tag:', tag)
             console.log('   Command:', input.c)
+            console.log('   Dollar Amount:', dollarAmount)
             console.log('   Data Side:', data.side)
             console.log('   Data object keys:', Object.keys(data))
             console.log('   Data FULL:', JSON.stringify(data, null, 2))
@@ -500,6 +501,7 @@ async function main(app) {
                 price: price,
                 contracts: contracts,
                 num_contracts: numContracts,
+                dollar_amount: dollarAmount, // Store original USD amount for futures
                 metadata: input,
                 opened: new Date()
             })
@@ -541,14 +543,23 @@ async function main(app) {
                     console.log(`   Adding: ${numContracts} @ ${price}`)
                     console.log(`   New: ${newTotalContracts} @ ${newAvgPrice.toFixed(4)}`)
 
+                    // Calculate new dollar amount (add to existing if both present)
+                    const updateFields = {
+                        total_contracts: newTotalContracts,
+                        average_price: newAvgPrice,
+                        last_updated: new Date()
+                    }
+
+                    if (dollarAmount !== null) {
+                        const existingDollarAmount = existingPosition.dollar_amount || 0
+                        updateFields.dollar_amount = existingDollarAmount + dollarAmount
+                        console.log(`   Dollar amount: ${existingDollarAmount} + ${dollarAmount} = ${updateFields.dollar_amount}`)
+                    }
+
                     await Positions_Open.updateOne(
                         { tag: tag, account: input.a, market_type: marketType },
                         {
-                            $set: {
-                                total_contracts: newTotalContracts,
-                                average_price: newAvgPrice,
-                                last_updated: new Date()
-                            },
+                            $set: updateFields,
                             $inc: { trade_count: 1 },
                             $push: { trade_ids: orderId || 'unknown' }
                         }
@@ -557,7 +568,7 @@ async function main(app) {
                 } else {
                     // Create new position using num_contracts
                     console.log(`   No existing ${marketType} position - creating new`)
-                    const newPosition = new Positions_Open({
+                    const positionData = {
                         tag: tag,
                         account: input.a,
                         symbol: input.s,
@@ -570,7 +581,14 @@ async function main(app) {
                         first_opened: new Date(),
                         last_updated: new Date(),
                         metadata: input
-                    })
+                    }
+
+                    if (dollarAmount !== null) {
+                        positionData.dollar_amount = dollarAmount
+                        console.log(`   Initial dollar amount: ${dollarAmount}`)
+                    }
+
+                    const newPosition = new Positions_Open(positionData)
                     await newPosition.save()
                     console.log('✅ New position created')
                 }
@@ -722,10 +740,13 @@ async function main(app) {
             console.log("   Is Futures Symbol:", isFuturesSymbol)
 
             let qntyUSD
+            let dollarAmount = null // Track original USD amount for futures
+
             if (isFuturesCommand && isFuturesSymbol) {
                 // For futures commands, qntyValue represents USD amount to trade
                 // Convert USD to contract count
                 console.log("   🔄 Converting futures USD to contracts...")
+                dollarAmount = qntyValue // Store original USD amount
                 qntyUSD = await convertFuturesUSDToContracts(qntyValue, symbol, trade)
                 console.log(`   ✅ Futures conversion: $${qntyValue} USD → ${qntyUSD} contracts`)
             } else if (isUSDTPair && isUSDTAmount) {
@@ -1245,7 +1266,14 @@ async function main(app) {
 
                     console.log(`   P&L: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
 
-                    // 5. Update position or delete if fully closed
+                    // 5. Calculate dollar amount for close (proportional to percentage closed)
+                    const closeDollarAmount = position.dollar_amount ? (position.dollar_amount * (percentage / 100)) : null
+                    const remainingDollarAmount = position.dollar_amount ? (position.dollar_amount - closeDollarAmount) : null
+
+                    console.log(`   Dollar amount closed: ${closeDollarAmount}`)
+                    console.log(`   Dollar amount remaining: ${remainingDollarAmount}`)
+
+                    // 6. Update position or delete if fully closed
                     const remainingContracts = position.total_contracts - contractsToClose
 
                     if (remainingContracts === 0 || percentage >= 100) {
@@ -1254,19 +1282,21 @@ async function main(app) {
                         console.log('✅ Position fully closed - removed from open_positions')
                     } else {
                         // Partial close - update position
+                        const updateFields = {
+                            total_contracts: remainingContracts,
+                            last_updated: new Date()
+                        }
+                        if (remainingDollarAmount !== null) {
+                            updateFields.dollar_amount = remainingDollarAmount
+                        }
                         await Positions_Open.updateOne(
                             { tag: orderTag, account: input.a, market_type: 'futures' },
-                            {
-                                $set: {
-                                    total_contracts: remainingContracts,
-                                    last_updated: new Date()
-                                }
-                            }
+                            { $set: updateFields }
                         )
                         console.log(`✅ Position updated: ${remainingContracts} contracts remaining`)
                     }
 
-                    // 6. Record close action in closed_trades
+                    // 7. Record close action in closed_trades
                     const closeTrade = new Trades_Closed({
                         tag: orderTag,
                         account: input.a,
@@ -1280,6 +1310,7 @@ async function main(app) {
                         position_before: position.total_contracts,
                         position_after: remainingContracts,
                         average_entry_price: position.average_price,
+                        dollar_amount: closeDollarAmount,
                         pnl: pnl,
                         pnl_percentage: pnlPercentage,
                         metadata: input,
@@ -1349,7 +1380,14 @@ async function main(app) {
 
                     console.log(`   P&L: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
 
-                    // 5. Update position or delete if fully closed
+                    // 5. Calculate dollar amount for close (proportional to percentage closed)
+                    const closeDollarAmount = position.dollar_amount ? (position.dollar_amount * (percentage / 100)) : null
+                    const remainingDollarAmount = position.dollar_amount ? (position.dollar_amount - closeDollarAmount) : null
+
+                    console.log(`   Dollar amount closed: ${closeDollarAmount}`)
+                    console.log(`   Dollar amount remaining: ${remainingDollarAmount}`)
+
+                    // 6. Update position or delete if fully closed
                     const remainingContracts = position.total_contracts - contractsToClose
 
                     if (remainingContracts === 0 || percentage >= 100) {
@@ -1358,19 +1396,21 @@ async function main(app) {
                         console.log('✅ Position fully closed - removed from open_positions')
                     } else {
                         // Partial close - update position
+                        const updateFields = {
+                            total_contracts: remainingContracts,
+                            last_updated: new Date()
+                        }
+                        if (remainingDollarAmount !== null) {
+                            updateFields.dollar_amount = remainingDollarAmount
+                        }
                         await Positions_Open.updateOne(
                             { tag: orderTag, account: input.a, market_type: 'futures' },
-                            {
-                                $set: {
-                                    total_contracts: remainingContracts,
-                                    last_updated: new Date()
-                                }
-                            }
+                            { $set: updateFields }
                         )
                         console.log(`✅ Position updated: ${remainingContracts} contracts remaining`)
                     }
 
-                    // 6. Record close action in closed_trades
+                    // 7. Record close action in closed_trades
                     const closeTrade = new Trades_Closed({
                         tag: orderTag,
                         account: input.a,
@@ -1384,6 +1424,7 @@ async function main(app) {
                         position_before: position.total_contracts,
                         position_after: remainingContracts,
                         average_entry_price: position.average_price,
+                        dollar_amount: closeDollarAmount,
                         pnl: pnl,
                         pnl_percentage: pnlPercentage,
                         metadata: input,
@@ -1581,7 +1622,7 @@ async function main(app) {
                     trade.marketBuyOrder(symbol,qntyUSD).then(function (data) {
                         console.log('   ✅ CCXT - Bitmex Long Futures Order Complete: ', new Date)
                         console.log('   Order Data:', JSON.stringify(data, null, 2))
-                        pushTagTrades(orderTag,data,input)
+                        pushTagTrades(orderTag,data,input,dollarAmount)
                         return {code: 200, message:'Success to process Long Futures Market Order', input:input}
                     }).catch(e => {
                         console.log('   ❌ ERROR in Long Futures Market Order:')
@@ -1772,7 +1813,7 @@ async function main(app) {
                     trade.marketSellOrder(symbol,qntyUSD).then(function (data) {
                         console.log('   ✅ CCXT - Bitmex Short Futures Order Complete: ', new Date)
                         console.log('   Order Data:', JSON.stringify(data, null, 2))
-                        pushTagTrades(orderTag,data,input)
+                        pushTagTrades(orderTag,data,input,dollarAmount)
                         return {code: 200, message:'Success to process Short Futures Market Order', input:input}
                     }).catch(e => {
                         console.log('   ❌ ERROR in Short Futures Market Order:')
@@ -1836,23 +1877,31 @@ async function main(app) {
 
                     console.log(`   P&L from closed portion: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
 
-                    // 4. Update position to new side
+                    // 4. Get old dollar amount and set new one
+                    const oldDollarAmount = position.dollar_amount || null
+                    console.log(`   Old position dollar amount: ${oldDollarAmount}`)
+                    console.log(`   New position dollar amount: ${dollarAmount}`)
+
+                    // 5. Update position to new side
+                    const updateFields = {
+                        side: newSide,
+                        total_contracts: currentContracts,
+                        average_price: fillPrice,
+                        trade_count: 1,
+                        trade_ids: [flipOrder.orderID || flipOrder.id || flipOrder.clOrdID],
+                        last_updated: new Date()
+                    }
+                    if (dollarAmount !== null) {
+                        updateFields.dollar_amount = dollarAmount // Use new dollar amount for flipped position
+                    }
+
                     await Positions_Open.updateOne(
                         { tag: orderTag, account: input.a, market_type: 'futures' },
-                        {
-                            $set: {
-                                side: newSide,
-                                total_contracts: currentContracts,
-                                average_price: fillPrice,
-                                trade_count: 1,
-                                trade_ids: [flipOrder.orderID || flipOrder.id || flipOrder.clOrdID],
-                                last_updated: new Date()
-                            }
-                        }
+                        { $set: updateFields }
                     )
                     console.log(`✅ Position flipped: ${currentSide} → ${newSide} (${currentContracts} contracts @ ${fillPrice})`)
 
-                    // 5. Record close action for closed portion in closed_trades
+                    // 6. Record close action for closed portion in closed_trades
                     const closeTrade = new Trades_Closed({
                         tag: orderTag,
                         account: input.a,
@@ -1866,6 +1915,7 @@ async function main(app) {
                         position_before: currentContracts,
                         position_after: 0, // Old position fully closed
                         average_entry_price: position.average_price,
+                        dollar_amount: oldDollarAmount, // Store old position's dollar amount
                         pnl: pnl,
                         pnl_percentage: pnlPercentage,
                         metadata: { ...input, flip: 'FLF', new_side: newSide },
@@ -1936,23 +1986,31 @@ async function main(app) {
 
                     console.log(`   P&L from closed portion: ${pnl.toFixed(4)} (${pnlPercentage.toFixed(2)}%)`)
 
-                    // 4. Update position to new side
+                    // 4. Get old dollar amount and set new one
+                    const oldDollarAmount = position.dollar_amount || null
+                    console.log(`   Old position dollar amount: ${oldDollarAmount}`)
+                    console.log(`   New position dollar amount: ${dollarAmount}`)
+
+                    // 5. Update position to new side
+                    const updateFields = {
+                        side: newSide,
+                        total_contracts: currentContracts,
+                        average_price: fillPrice,
+                        trade_count: 1,
+                        trade_ids: [flipOrder.orderID || flipOrder.id || flipOrder.clOrdID],
+                        last_updated: new Date()
+                    }
+                    if (dollarAmount !== null) {
+                        updateFields.dollar_amount = dollarAmount // Use new dollar amount for flipped position
+                    }
+
                     await Positions_Open.updateOne(
                         { tag: orderTag, account: input.a, market_type: 'futures' },
-                        {
-                            $set: {
-                                side: newSide,
-                                total_contracts: currentContracts,
-                                average_price: fillPrice,
-                                trade_count: 1,
-                                trade_ids: [flipOrder.orderID || flipOrder.id || flipOrder.clOrdID],
-                                last_updated: new Date()
-                            }
-                        }
+                        { $set: updateFields }
                     )
                     console.log(`✅ Position flipped: ${currentSide} → ${newSide} (${currentContracts} contracts @ ${fillPrice})`)
 
-                    // 5. Record close action for closed portion in closed_trades
+                    // 6. Record close action for closed portion in closed_trades
                     const closeTrade = new Trades_Closed({
                         tag: orderTag,
                         account: input.a,
@@ -1966,6 +2024,7 @@ async function main(app) {
                         position_before: currentContracts,
                         position_after: 0, // Old position fully closed
                         average_entry_price: position.average_price,
+                        dollar_amount: oldDollarAmount, // Store old position's dollar amount
                         pnl: pnl,
                         pnl_percentage: pnlPercentage,
                         metadata: { ...input, flip: 'FSF', new_side: newSide },
