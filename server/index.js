@@ -3667,15 +3667,36 @@ async function main(app) {
         expressLog.print(`${color.pick.green}LISTENING${color.pick.end}`,`Listening for calls on port:${listener.address().port}!`)
     })
 
-    // WebSocket server for positions dashboard
-    const wss = new WebSocket.Server({ server: listener, path: '/positions-ws' })
+    // WebSocket servers with manual upgrade handling
+    const positionsWss = new WebSocket.Server({ noServer: true })
+    const logsWss = new WebSocket.Server({ noServer: true })
     const positionsLog = new Logger('Positions WS', color.pick.cyan)
+    const logsLog = new Logger('Logs WS', color.pick.green)
+    const logBuffer = require('./utils/logBuffer')
+
+    // Handle upgrade requests and route to correct WebSocket server
+    listener.on('upgrade', (request, socket, head) => {
+        const pathname = request.url
+
+        if (pathname === '/positions-ws') {
+            positionsWss.handleUpgrade(request, socket, head, (ws) => {
+                positionsWss.emit('connection', ws, request)
+            })
+        } else if (pathname === '/logs-ws') {
+            logsWss.handleUpgrade(request, socket, head, (ws) => {
+                logsWss.emit('connection', ws, request)
+            })
+        } else {
+            socket.destroy()
+        }
+    })
 
     positionsLog.print('Init', 'WebSocket server created on /positions-ws')
+    logsLog.print('Init', 'WebSocket server created on /logs-ws')
 
     // Broadcast positions to all connected clients
     async function broadcastPositions() {
-        if (wss.clients.size === 0) return
+        if (positionsWss.clients.size === 0) return
 
         try {
             const positions = await Positions_Open.find({}).sort({ last_updated: -1 }).lean()
@@ -3705,7 +3726,7 @@ async function main(app) {
                 balances: balances
             })
 
-            wss.clients.forEach(client => {
+            positionsWss.clients.forEach(client => {
                 if (client.readyState === WebSocket.OPEN) {
                     client.send(message)
                 }
@@ -3716,8 +3737,8 @@ async function main(app) {
     }
 
     // Handle new WebSocket connections
-    wss.on('connection', async (ws) => {
-        positionsLog.print('Connect', `Client connected (total: ${wss.clients.size})`)
+    positionsWss.on('connection', async (ws) => {
+        positionsLog.print('Connect', `Client connected (total: ${positionsWss.clients.size})`)
 
         // Send initial positions and balances
         try {
@@ -3747,7 +3768,7 @@ async function main(app) {
         }
 
         ws.on('close', () => {
-            positionsLog.print('Disconnect', `Client disconnected (total: ${wss.clients.size})`)
+            positionsLog.print('Disconnect', `Client disconnected (total: ${positionsWss.clients.size})`)
         })
     })
 
@@ -3765,12 +3786,6 @@ async function main(app) {
     })
 
     // ========== LOG STREAMING WEBSOCKET ==========
-    const logBuffer = require('./utils/logBuffer');
-    const logsWss = new WebSocket.Server({ server: listener, path: '/logs-ws' });
-    const logsLog = new Logger('Logs WS', color.pick.green);
-
-    logsLog.print('Init', 'WebSocket server created on /logs-ws');
-
     logsWss.on('connection', (ws) => {
         logsLog.print('Connect', `Client connected (total: ${logsWss.clients.size})`);
 
