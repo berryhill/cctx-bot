@@ -67,6 +67,116 @@
             padding: 40px;
             color: #666;
         }
+        /* Log Viewer Styles */
+        .log-viewer {
+            margin-top: 30px;
+            background-color: #0a0a0a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            overflow: hidden;
+            font-family: monospace;
+        }
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background-color: #222;
+            border-bottom: 1px solid #333;
+        }
+        .log-header h3 {
+            margin: 0;
+            color: #00ffff;
+            font-size: 14px;
+        }
+        .log-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .log-status {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 3px;
+        }
+        .log-status.connected {
+            background-color: #28a745;
+            color: white;
+        }
+        .log-status.disconnected {
+            background-color: #dc3545;
+            color: white;
+        }
+        .auto-scroll-label {
+            color: #ccc;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+        }
+        .clear-btn {
+            background-color: #444;
+            color: #ccc;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .clear-btn:hover {
+            background-color: #555;
+        }
+        .log-container {
+            height: 300px;
+            overflow-y: auto;
+            padding: 8px;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        .log-entry {
+            padding: 2px 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: #00ff00;
+        }
+        .log-timestamp {
+            color: #888;
+            margin-right: 8px;
+        }
+        .log-service {
+            color: #00ffff;
+            margin-right: 4px;
+        }
+        .log-type {
+            color: #ffaa00;
+            margin-right: 8px;
+        }
+        .log-message {
+            color: #00ff00;
+        }
+        .log-error {
+            background-color: rgba(220, 53, 69, 0.15);
+        }
+        .log-error .log-message {
+            color: #ff6666;
+        }
+        .log-warn {
+            background-color: rgba(255, 193, 7, 0.1);
+        }
+        .log-warn .log-message {
+            color: #ffaa00;
+        }
+        .log-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .log-container::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+        .log-container::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -95,6 +205,22 @@
             <tr><td colspan="11" class="no-data">Loading...</td></tr>
         </tbody>
     </table>
+
+    <!-- Log Viewer -->
+    <div class="log-viewer">
+        <div class="log-header">
+            <h3>Server Logs</h3>
+            <div class="log-controls">
+                <span class="log-status disconnected" id="log-status">Disconnected</span>
+                <label class="auto-scroll-label">
+                    <input type="checkbox" id="auto-scroll" checked>
+                    Auto-scroll
+                </label>
+                <button class="clear-btn" id="clear-logs">Clear</button>
+            </div>
+        </div>
+        <div class="log-container" id="log-container"></div>
+    </div>
 
     <script>
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -182,6 +308,81 @@
                 `;
             }).join('');
         }
+
+        // ========== LOG VIEWER ==========
+        const logContainer = document.getElementById('log-container');
+        const logStatusEl = document.getElementById('log-status');
+        const autoScrollCheckbox = document.getElementById('auto-scroll');
+        const clearLogsBtn = document.getElementById('clear-logs');
+        let logs = [];
+        const MAX_LOGS = 1000;
+
+        const logsWs = new WebSocket(`${protocol}//${window.location.host}/logs-ws`);
+
+        logsWs.onopen = () => {
+            logStatusEl.textContent = 'Connected';
+            logStatusEl.className = 'log-status connected';
+        };
+
+        logsWs.onclose = () => {
+            logStatusEl.textContent = 'Disconnected';
+            logStatusEl.className = 'log-status disconnected';
+        };
+
+        logsWs.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'history') {
+                logs = data.logs;
+                renderLogs();
+            } else if (data.type === 'log') {
+                logs.push(data.log);
+                if (logs.length > MAX_LOGS) logs.shift();
+                appendLog(data.log);
+            }
+        };
+
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            }) + '.' + String(date.getMilliseconds()).padStart(3, '0');
+        }
+
+        function getLogClass(level) {
+            if (level === 'error') return 'log-entry log-error';
+            if (level === 'warn') return 'log-entry log-warn';
+            return 'log-entry';
+        }
+
+        function createLogElement(log) {
+            const div = document.createElement('div');
+            div.className = getLogClass(log.level);
+            div.innerHTML = `<span class="log-timestamp">${formatTimestamp(log.timestamp)}</span><span class="log-service">[${log.service}]</span><span class="log-type">&lt;${log.type}&gt;</span><span class="log-message">${log.message}</span>`;
+            return div;
+        }
+
+        function renderLogs() {
+            logContainer.innerHTML = '';
+            logs.forEach(log => logContainer.appendChild(createLogElement(log)));
+            if (autoScrollCheckbox.checked) {
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+        }
+
+        function appendLog(log) {
+            logContainer.appendChild(createLogElement(log));
+            if (autoScrollCheckbox.checked) {
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+        }
+
+        clearLogsBtn.addEventListener('click', () => {
+            logs = [];
+            logContainer.innerHTML = '';
+        });
     </script>
 </body>
 </html>

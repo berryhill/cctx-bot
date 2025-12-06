@@ -1,0 +1,145 @@
+.log-viewer {
+    margin: 15px;
+    background-color: #1e1e1e;
+    border-radius: 4px;
+    overflow: hidden;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+.log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background-color: #2d2d2d;
+    border-bottom: 1px solid #404040;
+}
+
+.log-header h3 {
+    margin: 0;
+    color: #cccccc;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.log-controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.connection-status {
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 3px;
+}
+
+.connection-status.connected {
+    background-color: #28a745;
+    color: white;
+}
+
+.connection-status.disconnected {
+    background-color: #dc3545;
+    color: white;
+}
+
+.auto-scroll-label {
+    color: #cccccc;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+}
+
+.clear-btn {
+    background-color: #555;
+    color: #ccc;
+    border: none;
+    padding: 4px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.clear-btn:hover {
+    background-color: #666;
+}
+
+.log-container {
+    height: 300px;
+    overflow-y: auto;
+    padding: 8px;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.log-entry {
+    padding: 2px 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #d4d4d4;
+}
+
+.log-timestamp {
+    color: #6a9955;
+    margin-right: 8px;
+}
+
+.log-service {
+    color: #569cd6;
+    margin-right: 4px;
+}
+
+.log-type {
+    color: #9cdcfe;
+    margin-right: 8px;
+}
+
+.log-message {
+    color: #d4d4d4;
+}
+
+/* Log level colors */
+.log-error {
+    background-color: rgba(220, 53, 69, 0.15);
+}
+
+.log-error .log-message {
+    color: #f14c4c;
+}
+
+.log-warn {
+    background-color: rgba(255, 193, 7, 0.1);
+}
+
+.log-warn .log-message {
+    color: #cca700;
+}
+
+.log-debug .log-message {
+    color: #888888;
+}
+
+.log-info .log-service {
+    color: #4ec9b0;
+}
+
+/* Scrollbar styling */
+.log-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.log-container::-webkit-scrollbar-track {
+    background: #2d2d2d;
+}
+
+.log-container::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 4px;
+}
+
+.log-container::-webkit-scrollbar-thumb:hover {
+    background: #666;
+}

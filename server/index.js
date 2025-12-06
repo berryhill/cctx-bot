@@ -1,3 +1,6 @@
+// MUST be first - intercepts console.log before anything else runs
+require('./utils/logBuffer');
+
 require('dotenv').config();
 
 const mongoose = require('mongoose');
@@ -3760,6 +3763,53 @@ async function main(app) {
     changeStream.on('error', (error) => {
         positionsLog.print('Error', `Change stream error: ${error.message}`)
     })
+
+    // ========== LOG STREAMING WEBSOCKET ==========
+    const logBuffer = require('./utils/logBuffer');
+    const logsWss = new WebSocket.Server({ server: listener, path: '/logs-ws' });
+    const logsLog = new Logger('Logs WS', color.pick.green);
+
+    logsLog.print('Init', 'WebSocket server created on /logs-ws');
+
+    logsWss.on('connection', (ws) => {
+        logsLog.print('Connect', `Client connected (total: ${logsWss.clients.size})`);
+
+        // Send log history to new client
+        try {
+            const history = logBuffer.getHistory();
+            ws.send(JSON.stringify({
+                type: 'history',
+                logs: history
+            }));
+            logsLog.print('History', `Sent ${history.length} historical logs to client`);
+        } catch (e) {
+            logsLog.print('Error', `Failed to send history: ${e.message}`);
+        }
+
+        // Subscribe to new logs
+        const unsubscribe = logBuffer.subscribe((logEntry) => {
+            if (ws.readyState === WebSocket.OPEN) {
+                try {
+                    ws.send(JSON.stringify({
+                        type: 'log',
+                        log: logEntry
+                    }));
+                } catch (e) {
+                    // Client disconnected, will be cleaned up on close
+                }
+            }
+        });
+
+        ws.on('close', () => {
+            unsubscribe();
+            logsLog.print('Disconnect', `Client disconnected (total: ${logsWss.clients.size})`);
+        });
+
+        ws.on('error', (error) => {
+            logsLog.print('Error', `WebSocket error: ${error.message}`);
+            unsubscribe();
+        });
+    });
 })();
 
 // setTimeout(() => console.log(stream.latest.instruments['XBTUSD'].lastPrice), 5000)

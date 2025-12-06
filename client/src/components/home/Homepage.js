@@ -6,6 +6,7 @@ import UserInfo from './UserInfo';
 import Position from './Position';
 import MarketOrder from './MarketOrder';
 import LimitOrder from './LimitOrder';
+import LogViewer from './LogViewer';
 
 import './homepage.css';
 
@@ -43,17 +44,18 @@ const Homepage = (props) => {
                 </div>
             </div>
             <div className='container-table'>
-                <Position 
+                <Position
                     className='table-position'
                     latestPrivate={props.latestPrivate}
                 />
-                <MarketOrder 
-                    className='table-marketorder' 
+                <MarketOrder
+                    className='table-marketorder'
                     tagTrades={tagTrades} />
-                <LimitOrder 
-                    className='table-limitorder' 
+                <LimitOrder
+                    className='table-limitorder'
                     tpOrders={tpOrders} />
             </div>
+            <LogViewer />
         </div> 
         : <LoadingScreen />
     )
