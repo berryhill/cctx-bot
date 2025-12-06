@@ -1,0 +1,247 @@
+//@version=6
+// Tradingview.com
+// @author LazyBear, xSilas, Ni6HTH4wK,
+// modified by sco77m4r7in and oh92
+// Indicator version
+
+indicator(title="Bull4Life Hunters Indicator final", overlay=false)
+
+// === INPUTS ===
+n1 = input.int(27, "Channel Length")
+n2 = input.int(9, "Average Length")
+n3 = input.int(3, "Short length")
+n4 = input.int(187, "Percentage Line Interval")
+bottom_level = input.int(27, "Bottom Circle Level")
+top_level = input.int(90, "Top Circle Level")
+count_length = input.int(187, "Circle Count")
+
+multi = input.bool(false, title="Multi-exchange?")
+
+// === SOURCE DATA ===
+src0 = hlc3
+
+src1 = request.security("BITFINEX:BTCUSD", timeframe.period, src0)
+src2 = request.security("POLONIEX:BTCUSDT", timeframe.period, src0)
+src3 = request.security("BITSTAMP:BTCUSD", timeframe.period, src0)
+src4 = request.security("COINBASE:BTCUSD", timeframe.period, src0)
+src5 = request.security("BITFINEX:BTCUSD", timeframe.period, src0)
+src10 = request.security("KRAKEN:XBTUSD", timeframe.period, src0)
+
+// === INDICATOR FUNCTIONS ===
+tci(src) =>
+    ta.ema((src - ta.ema(src, n1)) / (0.025 * ta.ema(math.abs(src - ta.ema(src, n1)), n1)), n2) + 50
+
+mf(src) =>
+    upper = math.sum(volume * (ta.change(src) <= 0 ? 0 : src), n3)
+    lower = math.sum(volume * (ta.change(src) >= 0 ? 0 : src), n3)
+    lower == 0 ? 100 : upper == 0 ? 0 : 100 - (100 / (1 + upper / lower))
+
+willy(src) =>
+    60 * (src - ta.highest(src, n2)) / (ta.highest(src, n2) - ta.lowest(src, n2)) + 80
+
+csi(src) =>
+    math.avg(ta.rsi(src, n3), ta.tsi(src0, n1, n2) * 50 + 50)
+
+godmode(src) =>
+    math.avg(tci(src), csi(src), mf(src), willy(src))
+
+tradition(src) =>
+    math.avg(tci(src), mf(src), ta.rsi(src, n3))
+
+// === CALCULATE INDICATORS ===
+godmode__1 = godmode(src0)
+godmode__2 = godmode(src1)
+godmode__3 = godmode(src2)
+godmode__4 = godmode(src3)
+godmode__5 = godmode(src4)
+godmode__6 = godmode(src5)
+
+avg_1 = math.avg(godmode__1, godmode__2, godmode__3, godmode__4, godmode__5, godmode__6)
+tradition__1 = tradition(src0)
+wt1 = multi ? avg_1 : tradition__1
+wt2 = ta.sma(wt1, 6)
+
+bottom = wt2 < bottom_level ? wt2 + 5 : na
+top = wt2 > top_level ? wt2 - 5 : na
+
+reversal_top = wt1[1] > wt1[2] and wt1 <= wt1[1] and wt1 > top_level ? wt1 : na
+reversal_bottom = wt1[1] < wt1[2] and wt1 >= wt1[1] and wt1 < bottom_level ? wt1 : na
+
+// === PLOTS ===
+plot(wt1, color=color.green, title="WT1")
+plot(wt2, color=color.red, title="WT2")
+plot(ta.ema((wt1 - wt2) * 2 + 50, n3), color=color.aqua, style=plot.style_area, title="Histogram")
+plot(top, title="Top Caution", color=color.red, style=plot.style_circles, linewidth=3)
+plot(bottom, title="Bottom Caution", color=color.green, style=plot.style_circles, linewidth=3)
+plot(reversal_top, title="Reversal Top", color=color.black, style=plot.style_circles, linewidth=4)
+plot(reversal_bottom, title="Reversal Bottom", color=color.blue, style=plot.style_circles, linewidth=4)
+
+blt = ta.ema((wt1 - wt2) * 2 + 50, n3) - wt1
+bl = blt > 0 ? 1 : 0
+sumpos = 100 / n4 * math.sum(bl, n4)
+plot(sumpos, title="Black line", color=color.black, linewidth=4)
+
+blt2 = ta.ema((wt1 - wt2) * 2 + 50, n3) - wt2
+bl2 = blt2 > 0 ? 1 : 0
+sumpos2 = 100 / n4 * math.sum(bl2, n4)
+plot(sumpos2, title="Blue line", color=color.blue, linewidth=1)
+
+blt3 = wt1 - wt2
+bl3 = blt3 > 0 ? 1 : 0
+sumpos3 = 100 / n4 * math.sum(bl3, n4)
+plot(sumpos3, title="Orange line", color=color.orange, linewidth=4)
+
+bottom2 = na(bottom) ? 0 : 1
+top2 = na(top) ? 0 : 1
+
+count_bottom = math.sum(bottom2, count_length)
+count_top = math.sum(top2, count_length)
+
+plot(count_bottom, color=color.green, linewidth=4, title="Bottom Count")
+plot(count_top, color=color.red, linewidth=4, title="Top Count")
+
+hline(top_level, title="Top Level", color=color.gray)
+hline(bottom_level, title="Bottom Level", color=color.gray)
+
+// === SIGNAL LOGIC ===
+// Simple signals based on line comparison
+sellSignal = sumpos > sumpos2
+buySignal = sumpos2 > sumpos
+
+// Detect FLIP events (crossovers)
+flipToLong = ta.crossover(sumpos2, sumpos)
+flipToShort = ta.crossover(sumpos, sumpos2)
+
+// === TAKE PROFIT INPUTS ===
+tp1_long = input.float(30, title="TP1 Long %", minval=0.1, maxval=1000, group="Take Profit Long")
+tp2_long = input.float(60, title="TP2 Long %", minval=0.1, maxval=1000, group="Take Profit Long")
+tp3_long = input.float(90, title="TP3 Long %", minval=0.1, maxval=1000, group="Take Profit Long")
+tp4_long = input.float(150, title="TP4 Long %", minval=0.1, maxval=1000, group="Take Profit Long")
+tp5_long = input.float(240, title="TP5 Long %", minval=0.1, maxval=1000, group="Take Profit Long")
+
+tp1_short = input.float(20, title="TP1 Short %", minval=0.1, maxval=1000, group="Take Profit Short")
+tp2_short = input.float(30, title="TP2 Short %", minval=0.1, maxval=1000, group="Take Profit Short")
+tp3_short = input.float(35, title="TP3 Short %", minval=0.1, maxval=1000, group="Take Profit Short")
+tp4_short = input.float(40, title="TP4 Short %", minval=0.1, maxval=1000, group="Take Profit Short")
+tp5_short = input.float(45, title="TP5 Short %", minval=0.1, maxval=1000, group="Take Profit Short")
+
+// Track entry price and position state
+var float longEntryPrice = na
+var float shortEntryPrice = na
+var bool inLongPosition = false
+var bool inShortPosition = false
+
+// Track TP hits
+var bool tp1_long_hit = false
+var bool tp2_long_hit = false
+var bool tp3_long_hit = false
+var bool tp4_long_hit = false
+var bool tp5_long_hit = false
+
+var bool tp1_short_hit = false
+var bool tp2_short_hit = false
+var bool tp3_short_hit = false
+var bool tp4_short_hit = false
+var bool tp5_short_hit = false
+
+// Update position on FLIP
+if flipToLong
+    longEntryPrice := close
+    inLongPosition := true
+    inShortPosition := false
+    // Reset TP flags
+    tp1_long_hit := false
+    tp2_long_hit := false
+    tp3_long_hit := false
+    tp4_long_hit := false
+    tp5_long_hit := false
+
+if flipToShort
+    shortEntryPrice := close
+    inShortPosition := true
+    inLongPosition := false
+    // Reset TP flags
+    tp1_short_hit := false
+    tp2_short_hit := false
+    tp3_short_hit := false
+    tp4_short_hit := false
+    tp5_short_hit := false
+
+// Calculate TP levels
+tp1_long_price = inLongPosition and not na(longEntryPrice) ? longEntryPrice * (1 + tp1_long / 100) : na
+tp2_long_price = inLongPosition and not na(longEntryPrice) ? longEntryPrice * (1 + tp2_long / 100) : na
+tp3_long_price = inLongPosition and not na(longEntryPrice) ? longEntryPrice * (1 + tp3_long / 100) : na
+tp4_long_price = inLongPosition and not na(longEntryPrice) ? longEntryPrice * (1 + tp4_long / 100) : na
+tp5_long_price = inLongPosition and not na(longEntryPrice) ? longEntryPrice * (1 + tp5_long / 100) : na
+
+tp1_short_price = inShortPosition and not na(shortEntryPrice) ? shortEntryPrice * (1 - tp1_short / 100) : na
+tp2_short_price = inShortPosition and not na(shortEntryPrice) ? shortEntryPrice * (1 - tp2_short / 100) : na
+tp3_short_price = inShortPosition and not na(shortEntryPrice) ? shortEntryPrice * (1 - tp3_short / 100) : na
+tp4_short_price = inShortPosition and not na(shortEntryPrice) ? shortEntryPrice * (1 - tp4_short / 100) : na
+tp5_short_price = inShortPosition and not na(shortEntryPrice) ? shortEntryPrice * (1 - tp5_short / 100) : na
+
+// Detect TP hits
+tp1_long_trigger = inLongPosition and not na(tp1_long_price) and close >= tp1_long_price and not tp1_long_hit
+tp2_long_trigger = inLongPosition and not na(tp2_long_price) and close >= tp2_long_price and not tp2_long_hit
+tp3_long_trigger = inLongPosition and not na(tp3_long_price) and close >= tp3_long_price and not tp3_long_hit
+tp4_long_trigger = inLongPosition and not na(tp4_long_price) and close >= tp4_long_price and not tp4_long_hit
+tp5_long_trigger = inLongPosition and not na(tp5_long_price) and close >= tp5_long_price and not tp5_long_hit
+
+tp1_short_trigger = inShortPosition and not na(tp1_short_price) and close <= tp1_short_price and not tp1_short_hit
+tp2_short_trigger = inShortPosition and not na(tp2_short_price) and close <= tp2_short_price and not tp2_short_hit
+tp3_short_trigger = inShortPosition and not na(tp3_short_price) and close <= tp3_short_price and not tp3_short_hit
+tp4_short_trigger = inShortPosition and not na(tp4_short_price) and close <= tp4_short_price and not tp4_short_hit
+tp5_short_trigger = inShortPosition and not na(tp5_short_price) and close <= tp5_short_price and not tp5_short_hit
+
+// Update TP hit flags
+if tp1_long_trigger
+    tp1_long_hit := true
+if tp2_long_trigger
+    tp2_long_hit := true
+if tp3_long_trigger
+    tp3_long_hit := true
+if tp4_long_trigger
+    tp4_long_hit := true
+if tp5_long_trigger
+    tp5_long_hit := true
+
+if tp1_short_trigger
+    tp1_short_hit := true
+if tp2_short_trigger
+    tp2_short_hit := true
+if tp3_short_trigger
+    tp3_short_hit := true
+if tp4_short_trigger
+    tp4_short_hit := true
+if tp5_short_trigger
+    tp5_short_hit := true
+
+// Plot FLIP markers
+plotshape(series=flipToLong, title="FLIP to Long", location=location.bottom, color=color.lime, style=shape.triangleup, size=size.large, text="FLIP\nLONG")
+plotshape(series=flipToShort, title="FLIP to Short", location=location.top, color=color.red, style=shape.triangledown, size=size.large, text="FLIP\nSHORT")
+
+// Plot accumulation signals
+plotshape(series=buySignal and not flipToLong, title="Accumulate Long", location=location.bottom, color=color.green, style=shape.circle, size=size.tiny)
+plotshape(series=sellSignal and not flipToShort, title="Accumulate Short", location=location.top, color=color.red, style=shape.circle, size=size.tiny)
+
+// === ALERTS ===
+alertcondition(flipToLong, title="🔄 FLIP to LONG", message="FLIP: Close all shorts and go LONG at {{close}}")
+alertcondition(flipToShort, title="🔄 FLIP to SHORT", message="FLIP: Close all longs and go SHORT at {{close}}")
+alertcondition(buySignal and not flipToLong, title="➕ ACCUMULATE LONG", message="ACCUMULATE: Add to LONG position at {{close}}")
+alertcondition(sellSignal and not flipToShort, title="➕ ACCUMULATE SHORT", message="ACCUMULATE: Add to SHORT position at {{close}}")
+
+// === TAKE PROFIT ALERTS ===
+
+// Long TP Alerts
+alertcondition(tp1_long_trigger, title="🎯 TP1 Long Hit", message="TP1 LONG: Take profit at {{close}} (+30%)")
+alertcondition(tp2_long_trigger, title="🎯 TP2 Long Hit", message="TP2 LONG: Take profit at {{close}} (+60%)")
+alertcondition(tp3_long_trigger, title="🎯 TP3 Long Hit", message="TP3 LONG: Take profit at {{close}} (+90%)")
+alertcondition(tp4_long_trigger, title="🎯 TP4 Long Hit", message="TP4 LONG: Take profit at {{close}} (+150%)")
+alertcondition(tp5_long_trigger, title="🎯 TP5 Long Hit", message="TP5 LONG: Take profit at {{close}} (+240%)")
+
+// Short TP Alerts
+alertcondition(tp1_short_trigger, title="🎯 TP1 Short Hit", message="TP1 SHORT: Take profit at {{close}} (-20%)")
+alertcondition(tp2_short_trigger, title="🎯 TP2 Short Hit", message="TP2 SHORT: Take profit at {{close}} (-30%)")
+alertcondition(tp3_short_trigger, title="🎯 TP3 Short Hit", message="TP3 SHORT: Take profit at {{close}} (-35%)")
+alertcondition(tp4_short_trigger, title="🎯 TP4 Short Hit", message="TP4 SHORT: Take profit at {{close}} (-40%)")
+alertcondition(tp5_short_trigger, title="🎯 TP5 Short Hit", message="TP5 SHORT: Take profit at {{close}} (-45%)")

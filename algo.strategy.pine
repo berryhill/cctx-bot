@@ -1,0 +1,243 @@
+//@version=6
+// Tradingview.com
+// @author LazyBear, xSilas, Ni6HTH4wK,
+// modified by sco77m4r7in and oh92
+// EXACT 1:1 conversion from v4 to v6
+
+strategy(title="Bull4Life Hunters with tp 2025", default_qty_type=strategy.percent_of_equity, default_qty_value=10, pyramiding=100, slippage=1, commission_type=strategy.commission.percent, commission_value=0.075)
+
+n1 = input.int(27, "Channel Length")
+n2 = input.int(9, "Average Length")
+n3 = input.int(3, "Short length")
+n4 = input.int(187, "Percentage Line Interval")
+bottom_level = input.int(27, "Bottom Circle Level")
+top_level = input.int(90, "Top Circle Level")
+count_length = input.int(187, "Circle Count")
+
+multi = input.bool(false, title="Multi-exchange?")
+src0 = hlc3
+
+src1 = request.security("BITFINEX:BTCUSD", timeframe.period, src0)
+src2 = request.security("POLONIEX:BTCUSDT", timeframe.period, src0)
+src3 = request.security("BITSTAMP:BTCUSD", timeframe.period, src0)
+src4 = request.security("COINBASE:BTCUSD", timeframe.period, src0)
+src5 = request.security("BITFINEX:BTCUSD", timeframe.period, src0)
+src10 = request.security("KRAKEN:XBTUSD", timeframe.period, src0)
+
+tci(src) =>
+    ta.ema((src - ta.ema(src, n1)) / (0.025 * ta.ema(math.abs(src - ta.ema(src, n1)), n1)), n2) + 50
+
+mf(src) =>
+    upper = math.sum(volume * (ta.change(src) <= 0 ? 0 : src), n3)
+    lower = math.sum(volume * (ta.change(src) >= 0 ? 0 : src), n3)
+    lower == 0 ? 100 : upper == 0 ? 0 : 100 - (100 / (1 + upper / lower))
+
+willy(src) =>
+    60 * (src - ta.highest(src, n2)) / (ta.highest(src, n2) - ta.lowest(src, n2)) + 80
+
+csi(src) =>
+    math.avg(ta.rsi(src, n3), ta.tsi(src0, n1, n2) * 50 + 50)
+
+godmode(src) =>
+    math.avg(tci(src), csi(src), mf(src), willy(src))
+
+tradition(src) =>
+    math.avg(tci(src), mf(src), ta.rsi(src, n3))
+
+godmode__1 = godmode(src0)
+godmode__2 = godmode(src1)
+godmode__3 = godmode(src2)
+godmode__4 = godmode(src3)
+godmode__5 = godmode(src4)
+godmode__6 = godmode(src5)
+
+avg_1 = math.avg(godmode__1, godmode__2, godmode__3, godmode__4, godmode__5, godmode__6)
+tradition__1 = tradition(src0)
+wt1 = multi ? avg_1 : tradition__1
+wt2 = ta.sma(wt1, 6)
+
+bottom = wt2 < bottom_level ? wt2 + 5 : na
+top = wt2 > top_level ? wt2 - 5 : na
+
+reversal_top = wt1[1] > wt1[2] and wt1 <= wt1[1] and wt1 > top_level ? wt1 : na
+reversal_bottom = wt1[1] < wt1[2] and wt1 >= wt1[1] and wt1 < bottom_level ? wt1 : na
+
+plot(wt1, color=color.green)
+plot(wt2, color=color.red)
+plot(ta.ema((wt1 - wt2) * 2 + 50, n3), color=color.aqua, style=plot.style_area)
+plot(top, title="Caution!", color=color.red, style=plot.style_circles, linewidth=3)
+plot(bottom, title="Caution!", color=color.green, style=plot.style_circles, linewidth=3)
+plot(reversal_top, title="Caution!", color=color.black, style=plot.style_circles, linewidth=4)
+plot(reversal_bottom, title="Caution!", color=color.blue, style=plot.style_circles, linewidth=4)
+
+blt = ta.ema((wt1 - wt2) * 2 + 50, n3) - wt1
+bl = blt > 0 ? 1 : 0
+sumpos = 100 / n4 * math.sum(bl, n4)
+plot(sumpos, title="Black line", color=color.black, linewidth=4)
+
+blt2 = ta.ema((wt1 - wt2) * 2 + 50, n3) - wt2
+bl2 = blt2 > 0 ? 1 : 0
+sumpos2 = 100 / n4 * math.sum(bl2, n4)
+plot(sumpos2, title="Blue line", color=color.blue, linewidth=1)
+
+blt3 = wt1 - wt2
+bl3 = blt3 > 0 ? 1 : 0
+sumpos3 = 100 / n4 * math.sum(bl3, n4)
+plot(sumpos3, title="Orange line", color=color.orange, linewidth=4)
+
+bottom2 = na(bottom) ? 0 : 1
+top2 = na(top) ? 0 : 1
+
+count_bottom = math.sum(bottom2, count_length)
+count_top = math.sum(top2, count_length)
+
+plot(count_bottom, color=color.green, linewidth=4)
+plot(count_top, color=color.red, linewidth=4)
+
+hline(top_level)
+hline(bottom_level)
+
+// Inputs for thresholds to close positions
+closeShortThreshold = input.int(50, title="Close Short Threshold", minval=0, maxval=100)
+closeLongThreshold = input.int(50, title="Close Long Threshold", minval=0, maxval=100)
+
+// Inputs for Take Profit levels
+tp1_long = input.float(2.0, title="TP1 Long %", minval=0.1, maxval=1000, group="Take Profit Long")
+tp2_long = input.float(4.0, title="TP2 Long %", minval=0.1, maxval=1000, group="Take Profit Long")
+tp3_long = input.float(6.0, title="TP3 Long %", minval=0.1, maxval=1000, group="Take Profit Long")
+tp4_long = input.float(8.0, title="TP4 Long %", minval=0.1, maxval=1000, group="Take Profit Long")
+tp5_long = input.float(10.0, title="TP5 Long %", minval=0.1, maxval=1000, group="Take Profit Long")
+
+tp1_short = input.float(2.0, title="TP1 Short %", minval=0.1, maxval=1000, group="Take Profit Short")
+tp2_short = input.float(4.0, title="TP2 Short %", minval=0.1, maxval=1000, group="Take Profit Short")
+tp3_short = input.float(6.0, title="TP3 Short %", minval=0.1, maxval=1000, group="Take Profit Short")
+tp4_short = input.float(8.0, title="TP4 Short %", minval=0.1, maxval=1000, group="Take Profit Short")
+tp5_short = input.float(10.0, title="TP5 Short %", minval=0.1, maxval=1000, group="Take Profit Short")
+
+// Calculate Take Profit levels based on the entry price
+tp1_long_price = strategy.position_avg_price * (1 + tp1_long / 100)
+tp2_long_price = strategy.position_avg_price * (1 + tp2_long / 100)
+tp3_long_price = strategy.position_avg_price * (1 + tp3_long / 100)
+tp4_long_price = strategy.position_avg_price * (1 + tp4_long / 100)
+tp5_long_price = strategy.position_avg_price * (1 + tp5_long / 100)
+
+tp1_short_price = strategy.position_avg_price * (1 - tp1_short / 100)
+tp2_short_price = strategy.position_avg_price * (1 - tp2_short / 100)
+tp3_short_price = strategy.position_avg_price * (1 - tp3_short / 100)
+tp4_short_price = strategy.position_avg_price * (1 - tp4_short / 100)
+tp5_short_price = strategy.position_avg_price * (1 - tp5_short / 100)
+
+// === Modify Buy and Sell Signal Logic ===
+// Simple signals based on line comparison
+sellSignal = sumpos > sumpos2 ? 1 : 0
+buySignal = sumpos2 > sumpos ? 1 : 0
+
+// Detect FLIP events (crossovers)
+flipToLong = ta.crossover(sumpos2, sumpos)
+flipToShort = ta.crossover(sumpos, sumpos2)
+
+// Track position size for flipping
+var float positionSizeToFlip = 0.0
+
+// On FLIP: Close entire position and open opposite with same size
+if flipToLong
+    positionSizeToFlip := math.abs(strategy.position_size)
+    strategy.close_all(comment="Flip to Long")
+    if positionSizeToFlip > 0
+        strategy.entry("Long", strategy.long, qty=positionSizeToFlip, comment="FLIP LONG")
+
+if flipToShort
+    positionSizeToFlip := math.abs(strategy.position_size)
+    strategy.close_all(comment="Flip to Short")
+    if positionSizeToFlip > 0
+        strategy.entry("Short", strategy.short, qty=positionSizeToFlip, comment="FLIP SHORT")
+
+// Plot FLIP markers
+plotshape(series=flipToLong, title="FLIP to Long", location=location.belowbar, color=color.lime, style=shape.triangleup, size=size.large, text="FLIP")
+plotshape(series=flipToShort, title="FLIP to Short", location=location.abovebar, color=color.red, style=shape.triangledown, size=size.large, text="FLIP")
+
+// Plot Buy and Sell Signals (for accumulation)
+plotshape(series=buySignal == 1 and not flipToLong, title="Accumulate Long", location=location.belowbar, color=color.green, style=shape.circle, size=size.tiny, text="")
+plotshape(series=sellSignal == 1 and not flipToShort, title="Accumulate Short", location=location.abovebar, color=color.red, style=shape.circle, size=size.tiny, text="")
+
+// Execute accumulation orders (not on flip bars)
+if buySignal == 1 and not flipToLong
+    strategy.entry("Long", strategy.long)
+
+if sellSignal == 1 and not flipToShort
+    strategy.entry("Short", strategy.short)
+
+// === Take Profit Logic ===
+// Track which TP levels have been hit
+var bool tp1_long_hit = false
+var bool tp2_long_hit = false
+var bool tp3_long_hit = false
+var bool tp4_long_hit = false
+var bool tp5_long_hit = false
+
+var bool tp1_short_hit = false
+var bool tp2_short_hit = false
+var bool tp3_short_hit = false
+var bool tp4_short_hit = false
+var bool tp5_short_hit = false
+
+// Reset TP flags when entering new position
+if flipToLong or (buySignal == 1 and strategy.position_size <= 0)
+    tp1_long_hit := false
+    tp2_long_hit := false
+    tp3_long_hit := false
+    tp4_long_hit := false
+    tp5_long_hit := false
+
+if flipToShort or (sellSignal == 1 and strategy.position_size >= 0)
+    tp1_short_hit := false
+    tp2_short_hit := false
+    tp3_short_hit := false
+    tp4_short_hit := false
+    tp5_short_hit := false
+
+// Close long positions at TP levels (only once per level)
+if strategy.position_size > 0
+    if close >= tp1_long_price and not tp1_long_hit
+        strategy.close("Long", qty_percent=20, comment="TP1 Long")
+        tp1_long_hit := true
+        alert("TP1 LONG Hit at " + str.tostring(close), alert.freq_once_per_bar)
+    if close >= tp2_long_price and not tp2_long_hit
+        strategy.close("Long", qty_percent=25, comment="TP2 Long")
+        tp2_long_hit := true
+        alert("TP2 LONG Hit at " + str.tostring(close), alert.freq_once_per_bar)
+    if close >= tp3_long_price and not tp3_long_hit
+        strategy.close("Long", qty_percent=33, comment="TP3 Long")
+        tp3_long_hit := true
+        alert("TP3 LONG Hit at " + str.tostring(close), alert.freq_once_per_bar)
+    if close >= tp4_long_price and not tp4_long_hit
+        strategy.close("Long", qty_percent=50, comment="TP4 Long")
+        tp4_long_hit := true
+        alert("TP4 LONG Hit at " + str.tostring(close), alert.freq_once_per_bar)
+    if close >= tp5_long_price and not tp5_long_hit
+        strategy.close("Long", qty_percent=100, comment="TP5 Long")
+        tp5_long_hit := true
+        alert("TP5 LONG Hit at " + str.tostring(close), alert.freq_once_per_bar)
+
+// Close short positions at TP levels (only once per level)
+if strategy.position_size < 0
+    if close <= tp1_short_price and not tp1_short_hit
+        strategy.close("Short", qty_percent=20, comment="TP1 Short")
+        tp1_short_hit := true
+        alert("TP1 SHORT Hit at " + str.tostring(close), alert.freq_once_per_bar)
+    if close <= tp2_short_price and not tp2_short_hit
+        strategy.close("Short", qty_percent=25, comment="TP2 Short")
+        tp2_short_hit := true
+        alert("TP2 SHORT Hit at " + str.tostring(close), alert.freq_once_per_bar)
+    if close <= tp3_short_price and not tp3_short_hit
+        strategy.close("Short", qty_percent=33, comment="TP3 Short")
+        tp3_short_hit := true
+        alert("TP3 SHORT Hit at " + str.tostring(close), alert.freq_once_per_bar)
+    if close <= tp4_short_price and not tp4_short_hit
+        strategy.close("Short", qty_percent=50, comment="TP4 Short")
+        tp4_short_hit := true
+        alert("TP4 SHORT Hit at " + str.tostring(close), alert.freq_once_per_bar)
+    if close <= tp5_short_price and not tp5_short_hit
+        strategy.close("Short", qty_percent=100, comment="TP5 Short")
+        tp5_short_hit := true
+        alert("TP5 SHORT Hit at " + str.tostring(close), alert.freq_once_per_bar)

@@ -1,6 +1,6 @@
 # Docker related variables
 DOCKER_IMAGE_NAME=ccxt-bot
-DOCKER_TAG=-0.0.53
+DOCKER_TAG=-0.0.54
 DOCKER_CONTAINER_NAME=ccxt-bot
 DOCKER_PORT=3222
 
