@@ -356,6 +356,54 @@ async function main(app) {
             }
         }
 
+        // Convert USD amount to base currency for spot trading
+        async function convertSpotUSDToContracts(usdAmount, symbol, trade) {
+            console.log('\n💱 convertSpotUSDToContracts() called')
+            console.log('   USD Amount:', usdAmount)
+            console.log('   Symbol:', symbol)
+
+            try {
+                const market = trade.bitmex.markets[symbol]
+
+                if (!market || !market.info) {
+                    throw new Error(`Market data not found for ${symbol}`)
+                }
+
+                // Get current price
+                const ticker = await trade.ticker(symbol)
+                const currentPrice = ticker.last
+
+                // Get lot size from market info
+                const lotSize = market.info.lotSize || market.precision?.amount || 1
+
+                console.log('   Current Price:', currentPrice)
+                console.log('   Lot Size:', lotSize)
+
+                // USD → base currency (e.g., BTC)
+                let baseAmount = usdAmount / currentPrice
+                console.log('   Raw base amount:', baseAmount)
+
+                // Round UP to lot size
+                baseAmount = Math.ceil(baseAmount / lotSize) * lotSize
+                console.log('   Rounded to lot size:', baseAmount)
+
+                // Calculate actual USD after rounding
+                const actualDollarAmount = baseAmount * currentPrice
+
+                console.log('   ✅ Final base amount:', baseAmount)
+                console.log('   ✅ Actual dollar amount:', actualDollarAmount.toFixed(2))
+
+                return {
+                    contracts: baseAmount,
+                    actualDollarAmount: actualDollarAmount
+                }
+
+            } catch (error) {
+                console.error('   ❌ Error converting spot USD to contracts:', error.message)
+                throw error
+            }
+        }
+
         //
         function getAutoQnty(defaultSize, isUSDT = false) {
             console.log('\n💰 getAutoQnty() called')
@@ -801,11 +849,14 @@ async function main(app) {
 
             // Check if this is a futures command
             const isFuturesCommand = ['LF', 'SF', 'CLF', 'CSF', 'FLF', 'FSF'].includes(command)
+            // Check if this is a spot command with a valid spot symbol
+            const isSpotCommand = ['B', 'S', 'CB', 'CS'].includes(command) && isValidSpotSymbol(symbol)
 
             console.log("   Is Futures Command:", isFuturesCommand)
+            console.log("   Is Spot Command:", isSpotCommand)
 
             let qntyUSD
-            let dollarAmount = null // Track actual USD amount for futures (adjusted if below minimum)
+            let dollarAmount = null // Track actual USD amount (adjusted if below minimum)
 
             if (isFuturesCommand) {
                 // For futures commands, qntyValue represents USD amount to trade
@@ -815,8 +866,16 @@ async function main(app) {
                 qntyUSD = conversion.contracts
                 dollarAmount = conversion.actualDollarAmount // Use actual amount (may be higher if below minimum)
                 console.log(`   ✅ Futures conversion: $${qntyValue} USD → ${qntyUSD} contracts (actual: $${dollarAmount.toFixed(2)})`)
+            } else if (isSpotCommand && (isUSDTAmount || !regXBT.test(input.q))) {
+                // For spot commands with USDT amount OR plain number: convert USD to base currency
+                // Plain numbers are treated as USD for spot (consistent with futures behavior)
+                console.log("   🔄 Converting spot USD to base currency...")
+                const conversion = await convertSpotUSDToContracts(qntyValue, symbol, trade)
+                qntyUSD = conversion.contracts
+                dollarAmount = conversion.actualDollarAmount
+                console.log(`   ✅ Spot conversion: $${qntyValue} USD → ${qntyUSD} base currency (actual: $${dollarAmount.toFixed(2)})`)
             } else if (isUSDTPair && isUSDTAmount) {
-                // For USDT pairs with USDT amount: convert USDT to contracts
+                // For non-spot USDT pairs with USDT amount (legacy path)
                 // Get current price: USDT amount / price = contracts
                 const ticker = await trade.ticker(symbol)
                 const currentPrice = ticker.last
