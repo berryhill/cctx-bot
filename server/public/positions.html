@@ -67,6 +67,23 @@
             padding: 40px;
             color: #666;
         }
+        .clean-btn {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            font-family: monospace;
+        }
+        .clean-btn:hover {
+            background-color: #c82333;
+        }
+        .clean-btn:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
         /* Log Viewer Styles */
         .log-viewer {
             margin-top: 30px;
@@ -199,10 +216,11 @@
                 <th>Trades</th>
                 <th>First Opened</th>
                 <th>Last Updated</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody id="positions-body">
-            <tr><td colspan="11" class="no-data">Loading...</td></tr>
+            <tr><td colspan="12" class="no-data">Loading...</td></tr>
         </tbody>
     </table>
 
@@ -282,7 +300,7 @@
 
         function renderPositions(positions) {
             if (positions.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="11" class="no-data">No open positions</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="12" class="no-data">No open positions</td></tr>';
                 return;
             }
 
@@ -304,9 +322,52 @@
                         <td>${pos.trade_count}</td>
                         <td>${new Date(pos.first_opened).toLocaleString()}</td>
                         <td>${new Date(pos.last_updated).toLocaleString()}</td>
+                        <td><button class="clean-btn" onclick="cleanTag('${pos.tag}', '${pos.account}', '${pos.symbol}')">Clean</button></td>
                     </tr>
                 `;
             }).join('');
+        }
+
+        // Clean tag function - calls CLEAN command via webhook
+        async function cleanTag(tag, account, symbol) {
+            if (!confirm(`Clean all data for tag "${tag}" on account "${account}"?\n\nThis will remove:\n- Open trades\n- Position records\n- Trigger orders\n- Historical trades`)) {
+                return;
+            }
+
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = 'Cleaning...';
+
+            try {
+                const response = await fetch('/ccxt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        s: symbol,
+                        c: 'CLEAN',
+                        t: 'M',
+                        q: '0',
+                        tag: tag,
+                        a: account,
+                        code: '13131'
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    alert(`Tag "${tag}" cleaned successfully!\n\nDeleted:\n- ${result.data.trades_opened} trades opened\n- ${result.data.positions_open} positions\n- ${result.data.trigger_orders} trigger orders`);
+                    // Row will disappear on next WebSocket update
+                } else {
+                    alert(`Failed to clean tag: ${result.message || 'Unknown error'}`);
+                    btn.disabled = false;
+                    btn.textContent = 'Clean';
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+                btn.disabled = false;
+                btn.textContent = 'Clean';
+            }
         }
 
         // ========== LOG VIEWER ==========

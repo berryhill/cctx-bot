@@ -2701,6 +2701,54 @@ async function main(app) {
             })
         }
 
+        // Function to clean all data for a tag (CLEAN command)
+        async function cleanTag(tag, account) {
+            console.log(`\n🧹 CLEAN command: Purging all data for tag "${tag}", account "${account}"`)
+
+            const results = {
+                trades_opened: 0,
+                positions_open: 0,
+                trigger_orders: 0,
+                to_processed: 0,
+                trades_closed: 0,
+                tp_orders_cleared: false
+            }
+
+            try {
+                // 1. Delete from Trades_Opened
+                const r1 = await Trades_Opened.deleteMany({ tag, account })
+                results.trades_opened = r1.deletedCount
+
+                // 2. Delete from Positions_Open
+                const r2 = await Positions_Open.deleteMany({ tag, account })
+                results.positions_open = r2.deletedCount
+
+                // 3. Delete from Trigger_Orders
+                const r3 = await Trigger_Orders.deleteMany({ tag, account })
+                results.trigger_orders = r3.deletedCount
+
+                // 4. Delete from TO_Processed
+                const r4 = await TO_Processed.deleteMany({ tag, account })
+                results.to_processed = r4.deletedCount
+
+                // 5. Delete from Trades_Closed (historical data)
+                const r5 = await Trades_Closed.deleteMany({ tag, account })
+                results.trades_closed = r5.deletedCount
+
+                // 6. Clear from in-memory tpOrders array
+                const before = tpOrders.length
+                tpOrders = tpOrders.filter(obj => !(obj.tag === tag))
+                results.tp_orders_cleared = tpOrders.length < before
+
+                console.log(`✅ CLEAN complete:`, results)
+                return { success: true, results }
+
+            } catch (error) {
+                console.error(`❌ CLEAN failed:`, error.message)
+                return { success: false, error: error.message }
+            }
+        }
+
         //<---------------------END----------------------->
 
         // Validate symbol based on market type
@@ -2716,6 +2764,16 @@ async function main(app) {
             return sendJSON(res, 400, `Invalid perpetual futures symbol. Must be one of: BTC/USDT:USDT, ETH/USDT:USDT, SOL/USDT:USDT, XRP/USDT:USDT, etc.`, {}, null)
         }
         console.log('✅ Symbol validation passed for', marketType, 'market')
+
+        // Handle CLEAN command - purge all tag data
+        if (command === 'CLEAN') {
+            const result = await cleanTag(orderTag, input.a)
+            if (result.success) {
+                return sendJSON(res, 200, `Tag "${orderTag}" cleaned successfully`, result.results, null)
+            } else {
+                return sendJSON(res, 500, `Failed to clean tag "${orderTag}"`, {}, result.error)
+            }
+        }
 
         //Call appropiate function based on post parameters, Market or Limit => Buy or Sell => With or Without TP.
         console.log('\n🔀 Entering main switch statement')
