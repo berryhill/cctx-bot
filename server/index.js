@@ -3180,7 +3180,6 @@ async function main(app) {
     //GET - React Index.js
     app.get('/', async function (req, res) {
         res.status(200).json({ status: 'ok', service: 'ccxt-bot' });
-        expressLog.print('Request','/ health check')
     })
 
     //POST routes now registered - main() was called above to define createTrade function
@@ -3270,7 +3269,6 @@ async function main(app) {
                 timestamp: new Date().toISOString(),
                 mongodb: 'connected'
             });
-            expressLog.print('Request','/health check - OK')
         } catch (error) {
             res.status(503).json({
                 status: 'error',
@@ -3279,7 +3277,6 @@ async function main(app) {
                 mongodb: 'disconnected',
                 error: error.message
             });
-            expressLog.print('Request','/health check - FAILED')
         }
     })
 
