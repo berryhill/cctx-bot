@@ -106,6 +106,142 @@ if (command === 'CLEAN') {
 
 ---
 
+## UI Integration (Positions Table)
+
+### 4. Add "Actions" Column to Table Header
+**File**: [server/public/positions.html](server/public/positions.html#L189-L202)
+
+Add a new column header after "Last Updated":
+```html
+<thead>
+    <tr>
+        <th>Tag</th>
+        <!-- ... existing columns ... -->
+        <th>Last Updated</th>
+        <th>Actions</th>  <!-- NEW -->
+    </tr>
+</thead>
+```
+
+Update the `colspan` in "No open positions" and "Loading..." rows from `11` to `12`.
+
+### 5. Add Button Styles
+**File**: [server/public/positions.html](server/public/positions.html#L7) (in `<style>` section)
+
+```css
+.clean-btn {
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    font-family: monospace;
+}
+.clean-btn:hover {
+    background-color: #c82333;
+}
+.clean-btn:disabled {
+    background-color: #666;
+    cursor: not-allowed;
+}
+```
+
+### 6. Update `renderPositions()` to Include Clean Button
+**File**: [server/public/positions.html](server/public/positions.html#L283-L310)
+
+Add button in each row:
+```javascript
+function renderPositions(positions) {
+    if (positions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="12" class="no-data">No open positions</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = positions.map(pos => {
+        const sideClass = pos.side === 'B' || pos.side === 'LF' ? 'long' : 'short';
+        const marketClass = pos.market_type === 'spot' ? 'spot' : 'futures';
+        const dollarAmount = pos.dollar_amount ? `$${pos.dollar_amount.toFixed(2)}` : '-';
+
+        return `
+            <tr>
+                <td>${pos.tag}</td>
+                <td>${pos.account}</td>
+                <td>${pos.symbol}</td>
+                <td class="${sideClass}">${pos.side}</td>
+                <td class="${marketClass}">${pos.market_type}</td>
+                <td>${pos.total_contracts.toFixed(4)}</td>
+                <td>${pos.average_price.toFixed(4)}</td>
+                <td>${dollarAmount}</td>
+                <td>${pos.trade_count}</td>
+                <td>${new Date(pos.first_opened).toLocaleString()}</td>
+                <td>${new Date(pos.last_updated).toLocaleString()}</td>
+                <td><button class="clean-btn" onclick="cleanTag('${pos.tag}', '${pos.account}', '${pos.symbol}')">Clean</button></td>
+            </tr>
+        `;
+    }).join('');
+}
+```
+
+### 7. Add `cleanTag()` JavaScript Function
+**File**: [server/public/positions.html](server/public/positions.html#L225) (in `<script>` section)
+
+```javascript
+async function cleanTag(tag, account, symbol) {
+    if (!confirm(`Clean all data for tag "${tag}" on account "${account}"?\n\nThis will remove:\n- Open trades\n- Position records\n- Trigger orders\n- Historical trades`)) {
+        return;
+    }
+
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = 'Cleaning...';
+
+    try {
+        const response = await fetch('/ccxt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                s: symbol,
+                c: 'CLEAN',
+                t: 'M',
+                q: '0',
+                tag: tag,
+                a: account,
+                code: '13131'
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            alert(`Tag "${tag}" cleaned successfully!\n\nDeleted:\n- ${result.data.trades_opened} trades opened\n- ${result.data.positions_open} positions\n- ${result.data.trigger_orders} trigger orders`);
+            // Row will disappear on next WebSocket update
+        } else {
+            alert(`Failed to clean tag: ${result.message || 'Unknown error'}`);
+            btn.disabled = false;
+            btn.textContent = 'Clean';
+        }
+    } catch (error) {
+        alert(`Error: ${error.message}`);
+        btn.disabled = false;
+        btn.textContent = 'Clean';
+    }
+}
+```
+
+---
+
+## Files to Modify (Updated)
+
+| File | Changes |
+|------|---------|
+| [server/validation/postSchema.js](server/validation/postSchema.js) | Add `'CLEAN'` to command enum |
+| [server/index.js](server/index.js) | Add `cleanTag()` function + handle in webhook |
+| [server/public/positions.html](server/public/positions.html) | Add Actions column, Clean button, cleanTag() JS function |
+
+---
+
 ## Webhook Usage
 
 ```bash
@@ -126,6 +262,7 @@ curl -X POST http://localhost:3000/ccxt -H "Content-Type: application/json" -d '
 
 ## Verification
 
+### Backend (Webhook)
 1. Create a test position with a tag
 2. Send CLEAN webhook for that tag
 3. Verify all collections are empty for that tag:
@@ -133,4 +270,14 @@ curl -X POST http://localhost:3000/ccxt -H "Content-Type: application/json" -d '
 mongo ccxt-bot --eval "db.trades_openeds.find({tag:'test'}).count()"
 mongo ccxt-bot --eval "db.positions_opens.find({tag:'test'}).count()"
 ```
-4. Check UI at `/positions.html` - tag should be gone
+
+### Frontend (UI)
+1. Open [http://localhost:3000/positions.html](http://localhost:3000/positions.html)
+2. Verify "Actions" column appears in table header
+3. Verify each position row has a red "Clean" button
+4. Click "Clean" button on a test position
+5. Confirm dialog should appear with warning message
+6. After confirming, verify:
+   - Button shows "Cleaning..." while processing
+   - Success alert shows deletion counts
+   - Position row disappears from table (via WebSocket update)
