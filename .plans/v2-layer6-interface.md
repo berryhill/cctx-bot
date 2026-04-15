@@ -10,6 +10,8 @@
 
 Build the React frontend that displays all tag data, allows per-tag configuration of TP levels/timers/balancer settings, shows pending orders with edit/cancel, and provides fee/funding/alert-log tabs per tag.
 
+**Also: expose and reconcile the real exchange position vs. the system's tracked position.** Over months of flips and partial closes, small contract residuals (rounding, partial fills, cancelled-but-partially-filled orders, ghost contract leftovers on flips/closes) accumulate. The bot can end up thinking the account holds 1000 LF total across all tags while BitMEX actually holds 1003 LF. The interface must surface this delta per symbol, and a **Position Balancer** must be able to close the residual so the system and the exchange stay in sync.
+
 ---
 
 ## Modified / New Files
@@ -28,6 +30,8 @@ client/src/
       AlertLogTab.js        — per-tag alert history table (Section 8.4)
     PendingOrders/
       PendingOrdersPanel.js — Set/SuperSet/BB orders with Edit/Clean (Section 8.5)
+    PositionBalancer/
+      PositionBalancerPanel.js — real exchange vs system position, delta, balance action (Section 6.9)
     TagManagement/
       AddTagForm.js         — create tag with defaults
       EditTagForm.js        — rename, change symbol
@@ -35,6 +39,8 @@ client/src/
 server/
   routes/
     tagRoutes.js            — v2 API endpoints for tag CRUD, settings, logs
+  engine/
+    positionBalancer.js     — aggregate system position, compare to exchange, place delta-closing market order
 ```
 
 ---
@@ -59,6 +65,8 @@ New REST endpoints for v2 tag management. Mount under `/api/v2/`:
 | `/api/v2/tags/:tag/pending/:orderId` | DELETE | Cancel pending order on exchange + remove |
 | `/api/v2/tags/:tag/pnl` | GET | Unrealized + Realized PnL (needs current price) |
 | `/api/v2/funding/rate` | GET | Current live funding rate from BitMEX |
+| `/api/v2/position-balancer/:account` | GET | Per-symbol: system total qty (summed across tags) vs exchange actual qty vs delta |
+| `/api/v2/position-balancer/:account/:symbol/balance` | POST | Place a market order to close the delta for one symbol |
 
 **GET `/api/v2/tags`** response shape (per tag):
 ```json
@@ -273,9 +281,116 @@ The frontend needs live data. Options:
 
 Recommend: **start with polling** (matches current architecture), add SSE/WS in a follow-up.
 
----
+### 6.9 — Position Balancer (Exchange Reality Check)
 
-## Integration Points
+Over time, the bot's tracked position and the actual exchange position drift apart. Causes observed in production:
+- Ghost contract leftovers from flips and closes (small residual not fully closed)
+- Rounding between `amountToPrecision` and exchange fill behavior
+- Cancelled-but-partially-filled orders
+- Manual trades placed outside the bot
+- Missed fills during WebSocket outages before reconciliation kicked in
+
+Even a tiny per-trade residual compounds over months into a large delta (the reported real case: system thinks 1000 LF, exchange holds 1003 LF).
+
+#### Scope
+
+The Position Balancer operates **per account, per symbol, across all tags** — it is NOT per-tag. The bot's "system position" for a symbol is the sum of `totalQty + setQty + superSetQty` across every tag on that account with that symbol, signed by direction (LF/B positive, SF/S negative for futures).
+
+#### Backend — `positionBalancer.js`
+
+```js
+async function getPositionComparison(exchange, account) {
+  // 1. Aggregate system position per symbol across all tags on this account
+  const tags = await Tag.find({ account })
+  const systemBySymbol = new Map()  // symbol -> signed qty
+
+  for (const tag of tags) {
+    const qty = tag.totalQty + tag.setQty + tag.superSetQty
+    if (qty === 0) continue
+    const signed = (tag.direction === 'LF' || tag.direction === 'B') ? qty : -qty
+    systemBySymbol.set(tag.symbol, (systemBySymbol.get(tag.symbol) || 0) + signed)
+  }
+
+  // 2. Fetch actual exchange positions
+  const positions = await exchange.fetchPositions()
+  const exchangeBySymbol = new Map()
+  for (const pos of positions) {
+    if (pos.contracts && pos.contracts !== 0) {
+      const signed = pos.side === 'long' ? pos.contracts : -pos.contracts
+      exchangeBySymbol.set(pos.symbol, signed)
+    }
+  }
+
+  // 3. Build comparison — union of both key sets
+  const symbols = new Set([...systemBySymbol.keys(), ...exchangeBySymbol.keys()])
+  const result = []
+  for (const symbol of symbols) {
+    const systemQty = systemBySymbol.get(symbol) || 0
+    const exchangeQty = exchangeBySymbol.get(symbol) || 0
+    result.push({
+      symbol,
+      systemQty,
+      exchangeQty,
+      delta: exchangeQty - systemQty,  // positive = exchange holds more than system thinks
+      inSync: Math.abs(exchangeQty - systemQty) < 0.0000001
+    })
+  }
+  return result
+}
+
+async function balancePosition(exchange, account, symbol) {
+  const comparisons = await getPositionComparison(exchange, account)
+  const row = comparisons.find(r => r.symbol === symbol)
+  if (!row || row.inSync) return { action: 'noop', reason: 'already in sync' }
+
+  // delta > 0 → exchange holds more than system → sell |delta| (close longs) or buy |delta| (close shorts)
+  // delta < 0 → exchange holds less than system → do NOT auto-open a position to cover (that would be risky)
+  //                                               surface it as a warning only
+  if (row.delta < 0) {
+    return { action: 'warn', reason: 'exchange holds LESS than system — manual review required', delta: row.delta }
+  }
+
+  // Close the residual. Direction to close = opposite of residual sign.
+  // If exchange has +3 extra longs → sell 3
+  // If exchange has -3 extra shorts (delta > 0 means exchange > system, can't be -3 short extra here)
+  const side = row.exchangeQty > row.systemQty ? 'sell' : 'buy'
+  const qty = Math.abs(row.delta)
+  const order = await exchange.createMarketOrder(symbol, side, qty, undefined, { reduceOnly: true })
+  return { action: 'balanced', orderId: order.id, side, qty }
+}
+```
+
+**Critical safeguards**:
+- Use `reduceOnly: true` so the balance order can never accidentally open a new position.
+- If `delta < 0` (exchange holds LESS than system believes), **do NOT auto-trade** — surface a warning for manual investigation. Auto-buying to cover a phantom system position could open real exposure the user doesn't want.
+- Balance order bypasses the tag system — it is booked to no tag, logged separately.
+- Log every balance action with before/after state to a new `PositionBalanceLog` collection.
+
+#### Optional Scheduled Reconciliation
+
+A configurable daily job (default: disabled, opt-in per account) can call `balancePosition` automatically for every out-of-sync symbol.
+
+- Setting lives on a per-account config doc (or extend user doc): `autoBalance: { enabled: false, hour: 0, minThreshold: 1 }`
+- `minThreshold` — do not auto-balance if `|delta| < minThreshold` (avoids churn on tiny rounding drift)
+- Log every run; surface last run timestamp in the UI
+
+Manual "Balance Now" button should always be available regardless of the auto-balance setting.
+
+#### Frontend — `PositionBalancerPanel.js`
+
+A new panel (at the top of the page, or as a tab alongside the tag table):
+
+| Symbol | System Qty | Exchange Qty | Delta | Status | Action |
+|--------|-----------|--------------|-------|--------|--------|
+| SOL/USDT:USDT | +1000 | +1003 | +3 | Out of sync | [Balance] |
+| XRP/USDT:USDT | -500 | -500 | 0 | ✓ In sync | — |
+| BTC/USDT:USDT | 0 | +2 | +2 | Orphan on exchange | [Balance] |
+
+- Polls `/api/v2/position-balancer/:account` every 30s
+- `[Balance]` button → POST to `/api/v2/position-balancer/:account/:symbol/balance`
+- Show a confirmation dialog before sending the balance order (qty + side)
+- For `delta < 0` rows: show a warning icon instead of a button, with text explaining manual review is required
+- Auto-balance toggle + schedule controls live in the panel header
 
 - **All layers**: the interface reads state from every layer and writes configuration back
 - **Layer 2**: tag CRUD, settings persistence, alert log reads
@@ -304,3 +419,8 @@ Recommend: **start with polling** (matches current architecture), add SSE/WS in 
 - [ ] Delete tag: cancels all orders first, aborts on failure
 - [ ] Tags at zero position remain visible permanently
 - [ ] Funding rate attributed per tag based on position share
+- [ ] Position Balancer panel shows system qty, exchange qty, delta per symbol
+- [ ] Balance button places a `reduceOnly` market order sized to the delta
+- [ ] Balance action is blocked (warn-only) when exchange qty < system qty
+- [ ] Every balance action is logged with before/after state
+- [ ] Optional auto-balance schedule runs only when enabled and respects `minThreshold`
