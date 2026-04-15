@@ -81,15 +81,16 @@ const TagSchema = new mongoose.Schema({
         triggerPct: { type: Number },  // e.g. 3 = 3%
         sellPct:    { type: Number }   // e.g. 20 = 20%
       }],
-      timer: { type: String, enum: ['15min', '30min', '1hr', '4hr', 'OFF'], default: '30min' }
+      // Integer minutes, 0-999999. 0 = OFF. No fixed enum — user can type any value.
+      timerMinutes: { type: Number, min: 0, max: 999999, default: 30 }
     },
     set: {
       levels: [{ triggerPct: Number, sellPct: Number }],
-      timer: { type: String, enum: ['15min', '30min', '1hr', '4hr', 'OFF'], default: '15min' }
+      timerMinutes: { type: Number, min: 0, max: 999999, default: 15 }
     },
     superSet: {
       levels: [{ triggerPct: Number, sellPct: Number }],
-      timer: { type: String, enum: ['15min', '30min', '1hr', '4hr', 'OFF'], default: '1hr' }
+      timerMinutes: { type: Number, min: 0, max: 999999, default: 60 }
     }
   },
 

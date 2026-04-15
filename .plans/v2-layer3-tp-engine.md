@@ -166,7 +166,11 @@ Wire these triggers into the appropriate places in `alertRouter.js` and `tagMana
 
 ### 3.6 — TP Recalculation Timers (Item 28)
 
-Each layer has an independent timer per tag. Configurable: 15min / 30min / 1hr / 4hr / OFF.
+Each layer has an independent timer per tag. **Configurable to any integer minute value from 0 to 999999** — no fixed enum. Each of the 3 layers (Main Tag / Set / Super Set) has its own independent interval, because different timeframes need different reset cadences.
+
+- `0` minutes = OFF (disabled)
+- `1` through `999999` = run recalc every N minutes
+- Stored as a plain `Number` (minutes) in `tag.tpConfig[layer].timerMinutes`
 
 ```js
 // In-memory timer registry — keyed by `${tag.tag}-${tag.account}-${layer}`
@@ -175,20 +179,20 @@ const tpTimers = new Map()
 function startTpTimer(tag, layer) {
   const key = `${tag.tag}-${tag.account}-${layer}`
   const config = tag.tpConfig[layer]
+  const minutes = Number(config.timerMinutes)
 
   // Clear existing timer
   if (tpTimers.has(key)) {
     clearInterval(tpTimers.get(key))
+    tpTimers.delete(key)
   }
 
-  if (config.timer === 'OFF') return
+  // 0 or invalid = OFF
+  if (!minutes || minutes <= 0) return
 
-  const ms = {
-    '15min': 15 * 60 * 1000,
-    '30min': 30 * 60 * 1000,
-    '1hr':   60 * 60 * 1000,
-    '4hr':   4 * 60 * 60 * 1000
-  }[config.timer]
+  // Clamp defensively to the supported range
+  const safeMinutes = Math.min(Math.max(Math.floor(minutes), 1), 999999)
+  const ms = safeMinutes * 60 * 1000
 
   const timerId = setInterval(async () => {
     await recalculateTpOrders(exchange, tag, layer)
@@ -226,10 +230,13 @@ When CLF or CSF arrives (without BB):
 When Main Tag TP5 fires (100% sell):
 1. Close 100% of everything — main + Set + Super Set positions
 2. Cancel all remaining unfired TPs across ALL 3 layers
-3. Cancel all pending BB orders
-4. Reset `currentPositionFees` to 0
-5. Direction becomes `null`
-6. Stop all 3 TP timers
+3. **Do NOT cancel pending BB orders** — leave them live on the exchange
+4. **Do NOT cancel active limit orders of Main / Set / Super Set** — leave them live on the exchange
+5. Reset `currentPositionFees` to 0
+6. Direction becomes `null`
+7. Stop all 3 TP timers
+
+Rationale: BB and pending Set/Super Set limits represent the user's queued strategy. TP5 closes the position but does not invalidate that queued strategy — the user decides when to cancel those explicitly (e.g., via Clean on the Pending Orders panel, or via an FLF/FSF).
 
 After TP5 — next entry command (Item 33):
 - Treat as fresh entry
@@ -317,7 +324,9 @@ Wire TP fill detection into the existing private WebSocket stream handler.
 - [ ] Each of the 10 recalculation triggers works correctly
 - [ ] 3 independent timers per tag, configurable intervals
 - [ ] CLF/CSF fires TP sequence (places if none active, lets run if active)
-- [ ] TP5 closes everything, cancels all TPs/BB, resets fees, direction null
+- [ ] TP5 closes everything, cancels unfired TPs across all 3 layers, resets fees, direction null
+- [ ] TP5 does NOT cancel pending BB orders — they remain live
+- [ ] TP5 does NOT cancel active Set / Super Set limit orders — they remain live
 - [ ] Next entry after TP5 places fresh TPs
 - [ ] Unrealized PnL correct for LF, SF, B directions with fee deduction
 - [ ] Realized PnL uses correct layer avgEntry
